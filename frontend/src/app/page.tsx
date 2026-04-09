@@ -12,23 +12,16 @@ export default function Home() {
 
   return (
     <AppShell sidebar={<Sidebar />}>
-      <header className="rounded-3xl border border-white/70 bg-white/85 px-6 py-6 shadow-[0_12px_40px_rgba(148,163,184,0.12)] backdrop-blur">
-        <p className="text-xs font-semibold tracking-wide text-amber-600">
-          AI Native 自适应学习平台
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+      <header className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
           MindFlow
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-          不直接给答案，而是通过温和追问和关键提示，帮你把“会做题”变成“会思考”。
+          开始对话后，系统会持续记录你的学习状态，并给出下一步学习建议。
         </p>
       </header>
 
-      <div className="mt-4 rounded-3xl border border-amber-100 bg-amber-50/60 p-4 text-sm text-amber-900 lg:hidden">
-        你正在使用移动视图。知识图谱、复习计划和学习进度将会出现在后续版本中。
-      </div>
-
-      <section className="mt-5 flex flex-1 flex-col rounded-3xl border border-slate-200 bg-white/85 p-4 shadow-[0_10px_35px_rgba(148,163,184,0.10)] sm:p-5">
+      <section className="mt-5 flex flex-1 flex-col rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <TopNav />
 
         <div className="flex min-h-0 flex-1 flex-col gap-4">

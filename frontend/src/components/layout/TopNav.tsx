@@ -12,14 +12,14 @@ export function TopNav() {
         <button
           key={item.label}
           type="button"
+          disabled={!item.active}
           className={`rounded-full border px-4 py-2 text-sm transition ${
             item.active
-              ? "border-amber-200 bg-amber-50 text-amber-700"
-              : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700"
-          }`}
+              ? "border-blue-900 bg-blue-900 text-white"
+              : "border-slate-200 bg-white text-slate-400"
+          } ${!item.active ? "cursor-not-allowed" : "hover:bg-blue-800"}`}
         >
           {item.label}
-          {!item.active ? <span className="ml-2 text-xs">即将上线</span> : null}
         </button>
       ))}
     </nav>

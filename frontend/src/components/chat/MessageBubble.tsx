@@ -12,8 +12,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-7 shadow-sm ${
           isAssistant
-            ? "border border-amber-100 bg-amber-50/70 text-slate-800"
-            : "bg-slate-800 text-slate-100"
+            ? "border border-slate-200 bg-white text-slate-800"
+            : "bg-blue-900 text-slate-100"
         }`}
       >
         <div className="mb-1 text-xs font-semibold opacity-75">

@@ -28,8 +28,8 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
 
       {isLoading ? (
         <div className="flex justify-start">
-          <div className="rounded-2xl border border-amber-100 bg-white px-4 py-3 text-sm text-amber-700 shadow-sm">
-            MindFlow 正在整理问题，并准备一个更有启发性的提问...
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+            思考中...
           </div>
         </div>
       ) : null}

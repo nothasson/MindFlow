@@ -32,12 +32,12 @@ export function ChatInput({ isLoading, onSend }: ChatInputProps) {
         onChange={(event) => setValue(event.target.value)}
         placeholder="输入你的问题，或者先说说你现在的理解..."
         rows={3}
-        className="min-h-24 flex-1 resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-300"
+        className="min-h-24 flex-1 resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400"
       />
       <button
         type="submit"
         disabled={isLoading}
-        className="rounded-2xl bg-amber-500 px-5 py-3 text-sm font-medium text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-amber-300"
+        className="rounded-2xl bg-blue-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
       >
         {isLoading ? "思考中..." : "发送"}
       </button>
