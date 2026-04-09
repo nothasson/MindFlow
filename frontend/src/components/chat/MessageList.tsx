@@ -29,10 +29,10 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
 
         {isLoading ? (
           <div className="flex gap-3">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#D4A574] text-xs font-semibold text-white">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#C67A4A] text-[10px] font-bold text-white">
               M
             </div>
-            <div className="pt-1 text-sm text-stone-500">思考中...</div>
+            <div className="pt-0.5 text-sm text-stone-400">思考中...</div>
           </div>
         ) : null}
 
