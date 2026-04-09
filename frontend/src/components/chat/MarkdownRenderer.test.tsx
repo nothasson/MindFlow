@@ -11,4 +11,11 @@ describe("MarkdownRenderer", () => {
     expect(screen.getByText("A")).toBeInTheDocument();
     expect(screen.getByText("B")).toBeInTheDocument();
   });
+
+  it("把 mermaid 代码块交给 MermaidBlock 渲染", () => {
+    render(<MarkdownRenderer content={"```mermaid\ngraph TD; A-->B;\n```"} />);
+
+    expect(screen.getByRole("button", { name: "查看源码" })).toBeInTheDocument();
+    expect(screen.getByTestId("mermaid-diagram")).toBeInTheDocument();
+  });
 });

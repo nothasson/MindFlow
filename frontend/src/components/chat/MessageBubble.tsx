@@ -1,5 +1,7 @@
 import type { Message } from "@/lib/types";
 
+import { MarkdownRenderer } from "./MarkdownRenderer";
+
 interface MessageBubbleProps {
   message: Message;
 }
@@ -16,10 +18,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       >
         {isAssistant ? "M" : "U"}
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="whitespace-pre-wrap text-[15px] leading-7 text-stone-800">
-          {message.content}
-        </p>
+      <div className="min-w-0 flex-1 text-[15px] leading-7 text-stone-800">
+        {isAssistant ? (
+          <MarkdownRenderer content={message.content} />
+        ) : (
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        )}
       </div>
     </div>
   );
