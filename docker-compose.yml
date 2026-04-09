@@ -1,0 +1,118 @@
+services:
+  # ===== 基础设施 =====
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mindflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mindflow_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-mindflow}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - mindflow-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mindflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - mindflow-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - mindflow-qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ===== 应用服务 =====
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - ./backend:/app
+      - mindflow-memory:/data/memory
+      - mindflow-uploads:/data/uploads
+    environment:
+      - BACKEND_PORT=8080
+      - POSTGRES_DSN=postgres://${POSTGRES_USER:-mindflow}:${POSTGRES_PASSWORD:-mindflow_dev}@postgres:5432/${POSTGRES_DB:-mindflow}?sslmode=disable
+      - REDIS_ADDR=redis:6379
+      - QDRANT_ADDR=qdrant:6334
+      - AI_SERVICE_ADDR=ai-service:8000
+      - MEMORY_DIR=/data/memory
+      - UPLOAD_DIR=/data/uploads
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  ai-service:
+    build:
+      context: ./ai-service
+    restart: unless-stopped
+    ports:
+      - "${AI_SERVICE_PORT:-8000}:8000"
+    volumes:
+      - ./ai-service:/app
+      - mindflow-uploads:/data/uploads
+    environment:
+      - AI_SERVICE_PORT=8000
+      - QDRANT_URL=http://qdrant:6333
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:${BACKEND_PORT:-8080}
+      - NEXT_PUBLIC_WS_URL=ws://localhost:${BACKEND_PORT:-8080}
+    depends_on:
+      - backend
+
+volumes:
+  mindflow-pg-data:
+  mindflow-redis:
+  mindflow-qdrant:
+  mindflow-memory:
+  mindflow-uploads:
