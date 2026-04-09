@@ -1,5 +1,5 @@
 # ===== 开发阶段 =====
-FROM golang:1.22-alpine AS dev
+FROM golang:1.26-alpine AS dev
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
 
 # ===== 构建阶段 =====
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 COPY go.mod go.sum* ./
