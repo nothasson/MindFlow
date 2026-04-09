@@ -30,7 +30,7 @@ export function AppShell({ sidebar, children }: AppShellProps) {
             onClick={closeSidebar}
           />
           <aside
-            className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-[#1F1D1A] shadow-2xl"
+            className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col shadow-2xl"
             role="complementary"
           >
             {sidebar}
