@@ -5,12 +5,7 @@ import { useCallback, useState } from "react";
 import { sendMessage as requestAssistantMessage } from "@/lib/api";
 import type { Message } from "@/lib/types";
 
-const initialMessages: Message[] = [
-  {
-    role: "assistant",
-    content: "你好，我是 MindFlow。你最近在学什么？我们可以先从你的理解开始。",
-  },
-];
+const initialMessages: Message[] = [];
 
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
