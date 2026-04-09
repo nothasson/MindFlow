@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# 环境变量
+.env
+
+# Node
+frontend/node_modules
+frontend/.next
+
+# Go
+backend/tmp
+
+# Python
+ai-service/__pycache__
+ai-service/.venv
+ai-service/*.pyc
+
+# Docker
+docker-compose.yml
+docker-compose.override.yml
+
+# Docs
+docs/
+*.md
+!README.md
