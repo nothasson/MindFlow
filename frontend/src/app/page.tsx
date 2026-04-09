@@ -26,6 +26,11 @@ export default function Home() {
           </div>
 
           <div className="w-full max-w-[46rem]">
+            {error ? (
+              <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
             <ChatInput isLoading={isLoading} onSend={sendMessage} />
           </div>
         </div>
