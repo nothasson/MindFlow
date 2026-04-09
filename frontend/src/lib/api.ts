@@ -83,9 +83,11 @@ export async function sendMessageStream(
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed.startsWith("data: ")) continue;
+        if (!trimmed.startsWith("data:")) continue;
 
-        const json = trimmed.slice(6);
+        const json = trimmed.startsWith("data: ")
+          ? trimmed.slice(6)
+          : trimmed.slice(5);
         try {
           const event = JSON.parse(json) as SSEEvent;
           if (event.error) {

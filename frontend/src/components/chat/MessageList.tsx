@@ -17,6 +17,11 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // 流式模式下：最后一条 assistant 有内容了就不再显示"思考中"
+  const lastMsg = messages[messages.length - 1];
+  const showLoading =
+    isLoading && !(lastMsg?.role === "assistant" && lastMsg.content.length > 0);
+
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8">
@@ -27,7 +32,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
           />
         ))}
 
-        {isLoading ? (
+        {showLoading ? (
           <div className="flex gap-3">
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#C67A4A] text-[10px] font-bold text-white">
               M

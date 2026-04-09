@@ -9,6 +9,11 @@ interface MessageBubbleProps {
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isAssistant = message.role === "assistant";
 
+  // 流式占位：assistant 内容为空时不渲染，由 loading 指示器负责
+  if (isAssistant && !message.content) {
+    return null;
+  }
+
   return (
     <div className="flex gap-3">
       <div
