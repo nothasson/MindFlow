@@ -2,6 +2,8 @@
 
 import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageList } from "@/components/chat/MessageList";
+import { AppShell } from "@/components/layout/AppShell";
+import { Sidebar } from "@/components/layout/Sidebar";
 import { useChat } from "@/hooks/useChat";
 
 export default function Home() {
@@ -10,9 +12,8 @@ export default function Home() {
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex h-full flex-col">
+    <AppShell sidebar={<Sidebar />}>
       {!hasMessages ? (
-        /* 空态：居中标题 + 输入框，对齐 claude.ai 首屏 */
         <div className="flex flex-1 flex-col items-center px-4 pt-[28vh]">
           <div className="mb-10 flex items-center gap-4">
             <span className="text-4xl text-[#C67A4A]">✺</span>
@@ -29,9 +30,8 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        /* 有消息态：对话列表 + 底部输入 */
         <>
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden pt-16">
             <MessageList messages={messages} isLoading={isLoading} />
           </div>
 
@@ -48,6 +48,6 @@ export default function Home() {
           </div>
         </>
       )}
-    </div>
+    </AppShell>
   );
 }
