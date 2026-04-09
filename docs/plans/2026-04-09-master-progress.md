@@ -76,22 +76,22 @@
   - PostgreSQL 建表：conversations、messages
   - Go 后端：GET /api/conversations、GET /api/conversations/:id
   - 前端侧栏接真实会话列表
-- [ ] **Orchestrator Agent**
+- [x] **Orchestrator Agent**
   - 总调度器，根据上下文决定调 TutorAgent 还是其他 Agent
-  - Eino Graph 编排
-- [ ] **E2E 测试**
+  - 基于关键词规则路由，当前只有 Tutor 可用
+- [ ] **E2E 测试**（延后，统一补）
   - Playwright：用户发消息 → AI 引导式回复 → 刷新后会话仍在
 
 ### P1：资料理解
 
 > 目标：上传 PDF，AI 理解并基于内容教学
 
-- [ ] Python AI 服务：文档解析（LlamaParse）
-- [ ] Python AI 服务：Embedding 生成
-- [ ] Qdrant 向量存储接入
+- [x] Python AI 服务：文档解析（PyMuPDF）
+- [x] Python AI 服务：Embedding 生成（sentence-transformers）
+- [x] Qdrant 向量存储接入
 - [ ] Go gRPC 客户端 + proto/content.proto 定义
 - [ ] Content Agent 集成到 Orchestrator
-- [ ] 前端资料上传页面
+- [x] 前端资料上传页面
 - [ ] E2E：上传 PDF → AI 基于内容提问
 
 ### P2：诊断和记忆
