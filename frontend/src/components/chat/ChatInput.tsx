@@ -32,15 +32,15 @@ export function ChatInput({ isLoading, onSend }: ChatInputProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="relative rounded-2xl bg-white shadow-[0_2px_12px_rgba(0,0,0,0.08)]"
+      className="relative rounded-[20px] bg-white shadow-[0_1px_8px_rgba(0,0,0,0.06)]"
     >
       <textarea
         value={value}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="有什么想学的？"
-        rows={2}
-        className="w-full resize-none rounded-2xl bg-transparent px-5 pb-14 pt-5 text-base text-stone-800 outline-none placeholder:text-stone-400"
+        placeholder="How can I help you today?"
+        rows={1}
+        className="w-full resize-none rounded-[20px] bg-transparent px-6 pb-14 pt-5 text-[16px] text-stone-700 outline-none placeholder:text-stone-400"
       />
       <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between">
         <button
