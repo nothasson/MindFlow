@@ -9,6 +9,11 @@ vi.mock("@/hooks/useChat", () => ({
   useChat: () => mockUseChat(),
 }));
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/",
+}));
+
 describe("首页状态切分", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,7 +36,7 @@ describe("首页状态切分", () => {
 
     it("应显示品牌图标", () => {
       render(<Home />);
-      expect(screen.getByText("✺")).toBeInTheDocument();
+      expect(screen.getByTestId("brand-mark")).toBeInTheDocument();
     });
 
     it("应显示单个输入框", () => {

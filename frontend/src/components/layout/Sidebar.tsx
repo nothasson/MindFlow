@@ -133,18 +133,6 @@ export function Sidebar({
           })}
         </div>
       </div>
-
-      <div className="border-t border-stone-300/40 px-2 pt-3">
-        <div className="flex h-9 items-center gap-2.5 rounded-lg px-1">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-300 text-stone-500" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21a8 8 0 0 0-16 0" />
-              <circle cx="12" cy="8" r="5" />
-            </svg>
-          </div>
-          <span className="text-sm text-stone-600">未登录</span>
-        </div>
-      </div>
     </div>
   );
 }
