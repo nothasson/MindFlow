@@ -18,7 +18,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   }, [messages, isLoading]);
 
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto rounded-3xl border border-slate-200 bg-slate-50 p-4">
+    <div className="flex-1 space-y-4 overflow-y-auto rounded-3xl border border-slate-100 bg-slate-50/80 p-4">
       {messages.map((message, index) => (
         <MessageBubble
           key={`${message.role}-${index}-${message.content}`}
@@ -28,8 +28,8 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
 
       {isLoading ? (
         <div className="flex justify-start">
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
-            MindFlow 正在思考下一步该怎么引导你...
+          <div className="rounded-2xl border border-amber-100 bg-white px-4 py-3 text-sm text-amber-700 shadow-sm">
+            MindFlow 正在整理问题，并准备一个更有启发性的提问...
           </div>
         </div>
       ) : null}
