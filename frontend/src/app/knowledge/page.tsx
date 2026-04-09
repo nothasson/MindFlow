@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MainShell } from "@/components/layout/MainShell";
 import { getKnowledgeGraph } from "@/lib/api";
 import type { KnowledgeNode, KnowledgeEdge } from "@/lib/types";
 
@@ -171,24 +172,17 @@ export default function KnowledgePage() {
     };
   }, [nodes, tick]);
 
-  if (loading) {
-    return (
+  return (
+    <MainShell>
+  {loading ? (
       <div className="flex h-full items-center justify-center bg-[#EEECE2]">
         <p className="text-stone-500">加载知识图谱...</p>
       </div>
-    );
-  }
-
-  if (error) {
-    return (
+  ) : error ? (
       <div className="flex h-full items-center justify-center bg-[#EEECE2]">
         <p className="text-red-600">{error}</p>
       </div>
-    );
-  }
-
-  if (nodes.length === 0) {
-    return (
+  ) : nodes.length === 0 ? (
       <div className="flex h-full flex-col items-center justify-center bg-[#EEECE2]">
         <div className="text-center">
           <div className="mb-4 text-6xl text-stone-300">
@@ -224,11 +218,8 @@ export default function KnowledgePage() {
           </div>
         </div>
       </div>
-    );
-  }
-
-  return (
-    <div className="relative flex h-full bg-[#EEECE2]">
+  ) : (
+      <div className="relative flex h-full bg-[#EEECE2]">
       {/* Graph area */}
       <div className="flex-1">
         <div className="absolute left-4 top-4 z-10">
@@ -400,6 +391,8 @@ export default function KnowledgePage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+  )}
+    </MainShell>
   );
 }
