@@ -12,7 +12,7 @@ export default function Home() {
   const hasMessages = messages.length > 0;
 
   return (
-    <AppShell sidebar={<Sidebar />}>
+    <AppShell sidebar={(onCollapse) => <Sidebar messages={messages} onCollapse={onCollapse} />}>
       {!hasMessages ? (
         <div className="flex flex-1 flex-col items-center px-4 pt-[28vh]">
           <div className="mb-10 flex items-center gap-4">

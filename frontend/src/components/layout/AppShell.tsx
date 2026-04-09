@@ -1,49 +1,29 @@
 import { useState, type ReactNode } from "react";
 
-import { SidebarToggle } from "./SidebarToggle";
+import { SidebarCollapsed } from "./SidebarCollapsed";
 
 interface AppShellProps {
-  sidebar: ReactNode;
+  sidebar: (onCollapse: () => void) => ReactNode;
   children: ReactNode;
 }
 
 export function AppShell({ sidebar, children }: AppShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const toggleSidebar = () => {
-    setIsSidebarOpen((prev) => !prev);
-  };
-
-  const closeSidebar = () => {
-    setIsSidebarOpen(false);
-  };
+  const expandSidebar = () => setIsSidebarOpen(true);
+  const collapseSidebar = () => setIsSidebarOpen(false);
 
   return (
-    <main className="relative flex h-screen bg-[#EEECE2] text-stone-800">
+    <main className="flex h-screen bg-[#EEECE2] text-stone-800">
       {isSidebarOpen ? (
-        <>
-          <button
-            type="button"
-            aria-label="关闭侧栏遮罩"
-            data-testid="sidebar-overlay"
-            className="fixed inset-0 z-40 bg-black/25"
-            onClick={closeSidebar}
-          />
-          <aside
-            className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col shadow-2xl"
-            role="complementary"
-          >
-            {sidebar}
-          </aside>
-        </>
-      ) : null}
+        <aside className="flex w-72 shrink-0 flex-col">
+          {sidebar(collapseSidebar)}
+        </aside>
+      ) : (
+        <SidebarCollapsed onExpand={expandSidebar} />
+      )}
 
-      <section className="relative flex min-w-0 flex-1 flex-col">
-        <div className="absolute left-4 top-4 z-30">
-          <SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
-        </div>
-        {children}
-      </section>
+      <section className="flex min-w-0 flex-1 flex-col">{children}</section>
     </main>
   );
 }
