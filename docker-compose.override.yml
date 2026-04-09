@@ -1,0 +1,21 @@
+# 开发环境覆盖配置
+# Docker Compose 自动合并此文件，本地开发时源码目录挂载到容器内，
+# 改代码无需重建镜像，HMR 即时生效。
+# 部署时请使用：docker-compose -f docker-compose.yml up -d（不加载 override）
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+      - mindflow-memory:/data/memory
+      - mindflow-uploads:/data/uploads
+
+  ai-service:
+    volumes:
+      - ./ai-service:/app
+      - mindflow-uploads:/data/uploads
+
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules

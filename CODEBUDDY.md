@@ -145,17 +145,27 @@ fix: 修复记忆系统跨 session 状态丢失问题
 
 ### 2. 修改文件后重启对应服务
 
-修改代码文件后，必须重启受影响的服务以使改动生效：
+本地开发时，`docker-compose.override.yml` 会自动将源码目录挂载到容器内，大多数改动通过 HMR / 热重载即时生效，无需重建镜像。
 
-| 修改范围 | 需要重启的服务 | 命令 |
-|---------|--------------|------|
-| `backend/` 下任何 `.go` 文件 | Go 后端 | `docker-compose restart backend`（开发模式 air 自动热重载，通常无需手动重启） |
-| `ai-service/` 下任何 `.py` 文件 | Python AI 微服务 | `docker-compose restart ai-service`（uvicorn --reload 自动热重载，通常无需手动重启） |
-| `frontend/` 下任何文件 | Next.js 前端 | `docker-compose restart frontend`（Next.js dev 模式有 HMR，通常自动热更新；如遇异常需手动重启） |
-| `proto/` 下 `.proto` 文件 | 重新生成代码后重启 Go 后端和 Python 微服务 | 先 `make proto`，再 `docker-compose restart backend ai-service` |
-| `docker-compose.yml` | 所有服务 | `docker-compose down && docker-compose up -d` |
+**需要重建镜像（`docker-compose up -d --build <服务名>`）的情况：**
+- 新增或删除 npm/pip/go 依赖（`package.json`、`requirements.txt`、`go.mod` 变化）
+- 修改 `Dockerfile` 本身
+- 修改 `docker-compose.yml` 或 `docker-compose.override.yml`
 
-注意：Docker Compose 模式下服务由容器管理，`docker-compose restart <服务名>` 即可重启，无需手动管理进程。
+**日常代码改动（新增/修改/删除源码文件）** 只需等 HMR 自动刷新，或执行 `docker-compose restart <服务名>`。
+
+| 修改范围 | 操作 |
+|---------|------|
+| 源码文件（`.ts/.tsx/.go/.py`） | 无需操作，HMR 自动生效；异常时 `docker-compose restart <服务名>` |
+| `package.json` / `requirements.txt` / `go.mod` 依赖变化 | `docker-compose up -d --build <服务名>` |
+| `Dockerfile` / `docker-compose.yml` | `docker-compose down && docker-compose up -d --build` |
+| `proto/` 下 `.proto` 文件 | 先 `make proto`，再 `docker-compose restart backend ai-service` |
+
+**部署模式**（别人 clone 后部署）使用：
+```bash
+docker-compose -f docker-compose.yml up -d
+```
+此时不加载 override，完全走 Dockerfile 构建镜像，不依赖本地源码挂载。
 
 ### 3. 全链路检查，不做打补丁式修改
 

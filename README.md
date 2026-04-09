@@ -39,23 +39,30 @@ cd MindFlow
 cp .env.example .env
 # 编辑 .env，填入你的 LLM_API_KEY
 
-# 3. 启动所有服务
-docker-compose up -d
+# 3. 启动所有服务（部署模式，不挂载本地源码）
+docker-compose -f docker-compose.yml up -d
 
 # 4. 访问
 # 前端：http://localhost:3000
 # 后端 API：http://localhost:8080
 # AI 微服务：http://localhost:8000
+```
 
-# 如果本机 3000 端口被占用，可在 .env 中修改 FRONTEND_PORT 后重启
+### 本地开发
+
+```bash
+# 直接 docker-compose up 会自动加载 docker-compose.override.yml，
+# 挂载源码到容器内，改代码无需重建镜像
+docker-compose up -d
 ```
 
 ### 常用命令
 
 ```bash
-docker-compose up -d               # 启动所有服务
+docker-compose up -d               # 本地开发（自动加载 override）
+docker-compose -f docker-compose.yml up -d  # 部署模式（不加载 override）
 docker-compose down                # 停止所有服务
-docker-compose up -d --build       # 重新构建并启动
+docker-compose up -d --build       # 依赖变化时重新构建
 docker-compose logs -f backend     # 查看指定服务日志
 docker-compose restart backend     # 重启指定服务
 ```
