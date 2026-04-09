@@ -37,7 +37,7 @@ func (m *mockChatModel) BindTools(tools []*schema.ToolInfo) error {
 
 func TestChatHandler_Handle(t *testing.T) {
 	tutor := agent.NewTutorAgent(&mockChatModel{})
-	handler := NewChatHandler(tutor)
+	handler := NewChatHandler(tutor, nil, nil)
 
 	// 创建 Hertz 测试引擎
 	engine := route.NewEngine(config.NewOptions(nil))
@@ -80,7 +80,7 @@ func TestChatHandler_Handle(t *testing.T) {
 
 func TestChatHandler_EmptyMessages(t *testing.T) {
 	tutor := agent.NewTutorAgent(&mockChatModel{})
-	handler := NewChatHandler(tutor)
+	handler := NewChatHandler(tutor, nil, nil)
 
 	engine := route.NewEngine(config.NewOptions(nil))
 	engine.POST("/api/chat", func(ctx context.Context, c *app.RequestContext) {
