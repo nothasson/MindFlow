@@ -47,16 +47,24 @@ type RouteDecision struct {
 
 // Orchestrator 总调度器
 type Orchestrator struct {
-	chatModel model.ChatModel
-	tutor     *TutorAgent
+	chatModel  model.ChatModel
+	tutor      *TutorAgent
+	diagnostic *DiagnosticAgent
+	memAgent   *MemoryAgent
 }
 
 // NewOrchestrator 创建调度器
 func NewOrchestrator(chatModel model.ChatModel, tutor *TutorAgent) *Orchestrator {
 	return &Orchestrator{
-		chatModel: chatModel,
-		tutor:     tutor,
+		chatModel:  chatModel,
+		tutor:      tutor,
+		diagnostic: NewDiagnosticAgent(chatModel),
 	}
+}
+
+// SetMemoryAgent 设置记忆 Agent（可选，依赖 memory store）
+func (o *Orchestrator) SetMemoryAgent(memAgent *MemoryAgent) {
+	o.memAgent = memAgent
 }
 
 // Chat 调度并执行对话（非流式）

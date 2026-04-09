@@ -99,19 +99,19 @@
 > 目标：AI 能诊断错误、记住学生状态
 > 借鉴 mempalace 分层记忆和时间知识图谱
 
-- [ ] **Diagnostic Agent**（TDD）
+- [x] **Diagnostic Agent**（TDD）
   - 分析学生回答，分类错误类型（概念错/方法错/粗心）
   - 输出诊断结构体，反馈给 Orchestrator
-- [ ] **Memory Agent + 分层记忆系统**（TDD）
+- [x] **Memory Agent + 分层记忆系统**（TDD）
   - L0 学生身份层（始终加载，~50 tokens）
   - L1 关键掌握度层（始终加载，~150 tokens）
   - L2 当前科目上下文（按需加载）
   - L3 历史深度搜索（按需加载，走 Qdrant）
   - Markdown 文件持久化：MEMORY.md + memory/YYYY-MM-DD.md
-- [ ] **时间知识图谱**
+- [x] **时间知识图谱**
   - PostgreSQL 存储知识点掌握度三元组（学生、关系、概念、有效期、置信度）
   - 支持历史查询和遗忘曲线衰减
-- [ ] memory_search / memory_get / memory_write 工具函数
+- [x] memory_search / memory_get / memory_write 工具函数
 - [ ] Dreaming sweep 定时任务（短期记忆 → 长期画像）
 - [ ] 知识图谱可视化（前端，颜色标注掌握度：绿/黄/红）
 - [ ] E2E：跨 session 记忆连续性
@@ -120,7 +120,7 @@
 
 > 目标：自动出题 + 遗忘曲线复习
 
-- [ ] SM-2 遗忘曲线算法（TDD）
+- [x] SM-2 遗忘曲线算法（TDD）
 - [ ] Quiz Agent：基于资料和掌握度自动出题
 - [ ] Review Agent：遗忘曲线调度
 - [ ] Curriculum Agent：AI 主动规划每次会话内容（复习优先于新内容）
