@@ -124,8 +124,8 @@
 - [x] Quiz Agent：基于资料和掌握度自动出题
 - [x] Review Agent：遗忘曲线调度
 - [x] Curriculum Agent：AI 主动规划每次会话内容（复习优先于新内容）
-- [ ] 复习计划日历（前端 /review 页面）
-- [ ] 学习仪表盘（前端 /dashboard 页面）
+- [x] 复习计划日历（前端 /review 页面）
+- [x] 学习仪表盘（前端 /dashboard 页面）
 - [ ] E2E：遗忘曲线提醒 → 复习 → 更新掌握度
 
 ### P4：打磨和扩展
