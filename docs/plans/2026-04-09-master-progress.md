@@ -186,6 +186,9 @@
 - [ ] AI 微服务客户端 health check 失败后无重试 → 加延迟初始化或重试
 - [ ] `runDreamingSweep` 时间源 `time.Now()` 不可测试 → 注入 clock 接口
 - [ ] 测试 Mock 依赖 prompt 文本关键词做分支 → 改为更明确的标识
+- [ ] `main.go` 中 `aiClient` 为 `nil` 时 `ResourceHandler` 可能空指针 → 确认 Upload 内部有 nil 检查，或在路由注册时跳过该路由
+- [ ] `dreaming.go` 步骤 4（写 MEMORY.md）成功但步骤 5（生成总结）失败时部分完成状态 → 实现幂等性校验或事务性操作
+- [ ] `store.go` Search 返回整个日志文件内容拼入 LLM prompt 可能超 token → 改为返回匹配片段而非全文
 
 ---
 
