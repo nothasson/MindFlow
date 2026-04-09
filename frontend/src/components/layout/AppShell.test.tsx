@@ -3,16 +3,14 @@ import { describe, it, expect } from "vitest";
 import { AppShell } from "./AppShell";
 
 describe("AppShell 覆盖式抽屉", () => {
-  it("默认状态下侧栏在移动端应隐藏", () => {
+  it("默认状态下不应渲染侧栏抽屉", () => {
     render(
       <AppShell sidebar={<div>侧栏内容</div>}>
         <div>主内容</div>
       </AppShell>
     );
-    // 侧栏容器应有 hidden lg:flex 类，在移动端隐藏
-    const aside = screen.getByRole("complementary");
-    expect(aside).toHaveClass("hidden");
-    expect(aside).toHaveClass("lg:flex");
+
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
   });
 
   it("应渲染侧栏开关按钮", () => {
