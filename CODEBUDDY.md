@@ -1,0 +1,175 @@
+# CODEBUDDY.md
+
+本文件为 CodeBuddy Code 在此仓库中工作时提供指引。
+
+## 项目概述
+
+MindFlow 是一个 AI 原生的自适应学习平台。学生上传学习资料，AI 自动解析内容、构建知识图谱、规划学习路径、通过苏格拉底式对话教学、诊断薄弱点，并基于遗忘曲线安排复习。它**不是**问答机器人，而是一个有记忆、会主动驱动学习节奏的私人导师。
+
+设计文档：`docs/plans/2026-04-09-mindflow-design.md`
+
+## 架构
+
+三服务架构，共享数据层：
+
+```
+前端 (Next.js)  ──WebSocket/REST──>  Go 后端 (Hertz + Eino Agents)  ──gRPC──>  Python AI 微服务 (FastAPI)
+                                                  │                                      │
+                                                  └──── PostgreSQL / Redis / 文件系统 ────┘── Qdrant (向量)
+```
+
+### Go 后端 (`backend/`)
+
+核心 Agent 运行时，基于 **Eino**（Agent 编排框架）和 **Hertz**（HTTP/WebSocket）。
+
+- **多 Agent 系统** — Orchestrator 调度各专职 Agent：
+  - `Tutor Agent` — 苏格拉底式对话（绝不直接给答案）
+  - `Diagnostic Agent` — 分析学生回答，分类错误类型（概念错/方法错/粗心）
+  - `Memory Agent` — 维护学生画像（掌握度、薄弱点、学习偏好）
+  - `Curriculum Agent` — 决定每次会话学什么、复习什么
+  - `Quiz Agent` — 自动出题和批改
+  - `Review Agent` — SM-2 间隔重复调度
+- `internal/memory/` — 三层记忆系统（即时/短期/长期），使用 Redis、Markdown 文件和 PostgreSQL
+- `internal/review/` — SM-2 算法实现和复习调度器
+- `internal/handler/` — HTTP/WebSocket 处理器
+- `internal/service/` — Python AI 服务的 gRPC 客户端
+
+### Python AI 微服务 (`ai-service/`)
+
+通过 **FastAPI** 处理 AI/ML 工作负载：
+
+- `/parse` — 文档解析（LlamaParse）
+- `/embed` — 生成 Embedding
+- `/search` — 向量相似度检索（Qdrant）
+- `/graph` — 知识图谱操作（NetworkX）
+- `/extract` — 知识点提取
+
+### 前端 (`frontend/`)
+
+**Next.js + Tailwind CSS**，四个主要页面：
+
+- `/` — 苏格拉底式对话界面（P0）
+- `/knowledge` — 知识图谱可视化，颜色标注掌握度（绿/黄/红）
+- `/dashboard` — 学习进度和数据分析仪表盘
+- `/review` — 遗忘曲线日历视图和复习队列
+
+### Proto (`proto/`)
+
+Go ↔ Python 通信的 gRPC 服务定义（`content.proto`）。
+
+## 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 前端 | TypeScript, Next.js, Tailwind CSS |
+| 后端 | Go, Eino（Agent 编排）, Hertz（HTTP/WS） |
+| AI 微服务 | Python, FastAPI, LlamaParse, NetworkX |
+| 数据库 | PostgreSQL, Qdrant（向量）, Redis（缓存/调度） |
+| 通信 | gRPC（Go ↔ Python）, WebSocket（前端 ↔ 后端） |
+
+## 常用命令
+
+通过项目根目录的 `Makefile` 管理常用命令。
+
+### Go 后端
+
+```bash
+cd backend
+go test ./...                           # 运行全部测试
+go test ./internal/agent/ -run TestSM2  # 运行指定测试
+go test -v ./internal/review/...        # 详细输出某个包的测试结果
+go run cmd/server/main.go               # 启动服务
+```
+
+### Python AI 微服务
+
+```bash
+cd ai-service
+pip install -r requirements.txt    # 安装依赖
+pytest                             # 运行全部测试
+pytest tests/test_parser.py        # 运行指定测试文件
+pytest -k "test_name"              # 按名称运行指定测试
+uvicorn app.main:app --reload      # 启动开发服务器
+```
+
+### 前端
+
+```bash
+cd frontend
+npm install                        # 安装依赖
+npm run dev                        # 启动开发服务器
+npx vitest                         # 运行单元测试
+npx vitest run tests/components/   # 运行指定测试目录
+npx playwright test                # 运行 E2E 测试
+npx playwright test --ui           # 带 UI 的 E2E 测试
+```
+
+### Docker 全服务
+
+```bash
+cp .env.example .env               # 首次部署：复制环境变量模板
+docker-compose up -d               # 启动所有服务（首次会自动构建镜像）
+docker-compose down                # 停止所有服务
+docker-compose up -d --build       # 重新构建镜像并启动
+docker-compose logs -f backend     # 查看指定服务日志
+docker-compose restart backend     # 重启指定服务
+```
+
+## 开发原则
+
+- **TDD 驱动开发** — 先写失败的测试（Red），再写最小实现使其通过（Green），然后重构（Refactor）。所有核心逻辑（Agent、SM-2 算法、记忆系统）必须先有测试再实现。
+- **苏格拉底原则** — Tutor Agent 绝不直接给答案，所有教学回复必须是引导性提问或提示。测试必须验证这一不变性。
+- **记忆连续性** — 记忆系统必须维持跨 session 的状态。Dreaming Sweep 每日定时任务负责将短期记忆提炼为长期学习画像。
+
+## 规则
+
+### 1. 完成功能点后必须提交并推送
+
+每完成一个小功能点（一个函数、一个组件、一个接口、一个测试用例等），必须立即：
+1. `git add` 相关文件
+2. `git commit` — 使用**中文**规范化 commit 信息，格式如下：
+   ```
+   <类型>: <简要描述>
+
+   <详细说明（可选）>
+   ```
+   类型包括：`feat`(新功能)、`fix`(修复)、`test`(测试)、`refactor`(重构)、`docs`(文档)、`style`(样式)、`chore`(杂项)
+3. `git push origin main`
+
+示例：
+```
+feat: 实现 SM-2 遗忘曲线算法核心逻辑
+test: 添加 Tutor Agent 苏格拉底式对话单元测试
+fix: 修复记忆系统跨 session 状态丢失问题
+```
+
+### 2. 修改文件后重启对应服务
+
+修改代码文件后，必须重启受影响的服务以使改动生效：
+
+| 修改范围 | 需要重启的服务 | 命令 |
+|---------|--------------|------|
+| `backend/` 下任何 `.go` 文件 | Go 后端 | `docker-compose restart backend`（开发模式 air 自动热重载，通常无需手动重启） |
+| `ai-service/` 下任何 `.py` 文件 | Python AI 微服务 | `docker-compose restart ai-service`（uvicorn --reload 自动热重载，通常无需手动重启） |
+| `frontend/` 下任何文件 | Next.js 前端 | `docker-compose restart frontend`（Next.js dev 模式有 HMR，通常自动热更新；如遇异常需手动重启） |
+| `proto/` 下 `.proto` 文件 | 重新生成代码后重启 Go 后端和 Python 微服务 | 先 `make proto`，再 `docker-compose restart backend ai-service` |
+| `docker-compose.yml` | 所有服务 | `docker-compose down && docker-compose up -d` |
+
+注意：Docker Compose 模式下服务由容器管理，`docker-compose restart <服务名>` 即可重启，无需手动管理进程。
+
+### 3. 全链路检查，不做打补丁式修改
+
+新增或修改逻辑时，必须顺着整条调用链路检查，确保一致性：
+
+- **数据模型变更**：检查 Go model → PostgreSQL schema → Python schemas → 前端 types.ts 是否同步
+- **API 接口变更**：检查 proto 定义 → Go handler → Python router → 前端 api.ts/ws.ts 是否一致
+- **Agent 行为变更**：检查 Agent 实现 → Orchestrator 调度 → 记忆系统读写 → 前端展示是否衔接
+- **配置变更**：检查 .env.example → docker-compose.yml → 各服务读取环境变量的代码是否对齐
+
+禁止"先改一处跑通再说"的打补丁方式。每次修改必须把相关链路上的所有文件一起改完、一起提交。
+
+## 关键设计决策
+
+- **SM-2（SuperMemo）算法**用于间隔重复 — `internal/review/sm2.go`。评分 0-5 分；≤2 分重置复习间隔为 1 天。
+- **基于 Markdown 的记忆文件**存放于 `~/.mindflow/workspace/` — 人类可读、对 git 友好。`MEMORY.md` 存储长期画像；`memory/YYYY-MM-DD.md` 存储每日学习日志。
+- **Eino Graph 实现苏格拉底对话状态机** — 状态流转：开场 → 提问 → 等待回答 → 诊断 →（正确/概念不清/方法错误）→ 循环。特殊处理：卡住 2 轮以上 → 给提示；4 轮以上 → 降低难度；连续 3 题正确 → 提升难度或进入下一概念。
