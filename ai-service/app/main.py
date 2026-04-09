@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import parse, embed, search
+from app.routers import embed, extract, parse, search, upsert, url
 
 app = FastAPI(title="MindFlow AI Service")
 
@@ -15,8 +15,11 @@ app.add_middleware(
 )
 
 app.include_router(parse.router, tags=["parse"])
+app.include_router(url.router, tags=["url"])
 app.include_router(embed.router, tags=["embed"])
+app.include_router(upsert.router, tags=["upsert"])
 app.include_router(search.router, tags=["search"])
+app.include_router(extract.router, tags=["extract"])
 
 
 @app.get("/health")

@@ -1,5 +1,7 @@
 "use client";
 
+import { MainShell } from "@/components/layout/MainShell";
+
 const stats = [
   { label: "总学习天数", value: "0", unit: "天" },
   { label: "已掌握概念", value: "0", unit: "个" },
@@ -9,8 +11,9 @@ const stats = [
 
 export default function DashboardPage() {
   return (
-    <div className="flex h-full flex-col bg-[#EEECE2]">
-      <div className="mx-auto w-full max-w-4xl px-4 py-12">
+    <MainShell>
+      <div className="flex h-full flex-col bg-[#EEECE2]">
+        <div className="mx-auto w-full max-w-4xl px-4 py-12">
         <h1 className="mb-2 text-2xl font-semibold text-stone-800">学习仪表盘</h1>
         <p className="mb-8 text-sm text-stone-500">
           整体学习进度和数据分析。
@@ -51,7 +54,8 @@ export default function DashboardPage() {
             暂无诊断数据，AI 诊断你的回答后这里会显示错误类型统计。
           </p>
         </div>
+        </div>
       </div>
-    </div>
+    </MainShell>
   );
 }

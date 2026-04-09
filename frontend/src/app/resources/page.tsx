@@ -2,18 +2,20 @@
 
 import { useCallback, useState } from "react";
 
-const AI_SERVICE_URL = process.env.NEXT_PUBLIC_AI_SERVICE_URL ?? "http://localhost:8000";
-
-interface UploadResult {
-  filename: string;
-  text: string;
-  pages: number;
-}
+import { MainShell } from "@/components/layout/MainShell";
+import { importUrlResource, uploadResource } from "@/lib/api";
+import type { ResourceUploadResult } from "@/lib/types";
 
 export default function ResourcesPage() {
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<UploadResult | null>(null);
+  const [urlValue, setUrlValue] = useState("");
+  const [result, setResult] = useState<ResourceUploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const applyResult = useCallback((data: ResourceUploadResult) => {
+    setResult(data);
+    setError(null);
+  }, []);
 
   const handleUpload = useCallback(async (file: File) => {
     setUploading(true);
@@ -21,26 +23,36 @@ export default function ResourcesPage() {
     setResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch(`${AI_SERVICE_URL}/parse`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`解析失败 (${response.status})`);
-      }
-
-      const data = (await response.json()) as UploadResult;
-      setResult(data);
+      const data = await uploadResource(file);
+      applyResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "上传失败");
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [applyResult]);
+
+  const handleImportUrl = useCallback(async () => {
+    const trimmed = urlValue.trim();
+    if (!trimmed) {
+      setError("请输入网页链接");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const data = await importUrlResource(trimmed);
+      applyResult(data);
+      setUrlValue("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导入失败");
+    } finally {
+      setUploading(false);
+    }
+  }, [applyResult, urlValue]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -60,57 +72,106 @@ export default function ResourcesPage() {
   );
 
   return (
-    <div className="flex h-full flex-col bg-[#EEECE2]">
-      <div className="mx-auto w-full max-w-3xl px-4 py-12">
-        <h1 className="mb-2 text-2xl font-semibold text-stone-800">资料库</h1>
-        <p className="mb-8 text-sm text-stone-500">
-          上传学习资料，AI 会自动解析并基于内容进行教学。
-        </p>
-
-        <div
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={handleDrop}
-          className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 bg-white/50 px-6 py-16 text-center transition hover:border-stone-400"
-        >
-          <p className="mb-4 text-stone-600">
-            {uploading ? "正在解析..." : "拖拽文件到此处，或点击选择"}
+    <MainShell>
+      <div className="flex h-full flex-col bg-[#EEECE2]">
+        <div className="mx-auto w-full max-w-3xl px-4 py-12">
+          <h1 className="mb-2 text-2xl font-semibold text-stone-800">资料库</h1>
+          <p className="mb-8 text-sm text-stone-500">
+            上传学习资料，或直接粘贴网页链接，AI 会自动解析并基于内容进行教学。
           </p>
-          <label className="cursor-pointer rounded-lg bg-stone-800 px-4 py-2 text-sm text-white transition hover:bg-stone-700">
-            选择文件
-            <input
-              type="file"
-              accept=".pdf,.txt,.md"
-              onChange={handleFileInput}
-              className="hidden"
-              disabled={uploading}
-            />
-          </label>
-          <p className="mt-3 text-xs text-stone-400">支持 PDF、TXT、Markdown</p>
-        </div>
 
-        {error ? (
-          <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        ) : null}
-
-        {result ? (
-          <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-6">
-            <h2 className="mb-2 text-lg font-semibold text-stone-800">
-              {result.filename}
-            </h2>
-            <p className="mb-4 text-sm text-stone-500">
-              共 {result.pages} 页，提取了 {result.text.length} 个字符
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+            className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 bg-white/50 px-6 py-16 text-center transition hover:border-stone-400"
+          >
+            <p className="mb-4 text-stone-600">
+              {uploading ? "正在处理..." : "拖拽文件到此处，或点击选择"}
             </p>
-            <div className="max-h-96 overflow-y-auto rounded-xl bg-stone-50 p-4 text-sm text-stone-700">
-              <pre className="whitespace-pre-wrap">{result.text.slice(0, 3000)}</pre>
-              {result.text.length > 3000 ? (
-                <p className="mt-2 text-stone-400">...（已截断显示前 3000 字符）</p>
-              ) : null}
+            <label className="cursor-pointer rounded-lg bg-stone-800 px-4 py-2 text-sm text-white transition hover:bg-stone-700">
+              选择文件
+              <input
+                type="file"
+                accept=".pdf,.txt,.md"
+                onChange={handleFileInput}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
+            <p className="mt-3 text-xs text-stone-400">支持 PDF、TXT、Markdown</p>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
+            <h2 className="text-sm font-medium text-stone-700">从网页链接导入</h2>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+              <input
+                type="url"
+                value={urlValue}
+                onChange={(e) => setUrlValue(e.target.value)}
+                placeholder="粘贴网页链接，例如 https://example.com/article"
+                className="flex-1 rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm text-stone-700 outline-none ring-0 placeholder:text-stone-400 focus:border-stone-400"
+                disabled={uploading}
+              />
+              <button
+                type="button"
+                onClick={handleImportUrl}
+                disabled={uploading}
+                className="rounded-lg bg-stone-800 px-4 py-2 text-sm text-white transition hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                导入链接
+              </button>
             </div>
           </div>
-        ) : null}
+
+          {error ? (
+            <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          ) : null}
+
+          {result ? (
+            <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-6">
+              <h2 className="mb-2 text-lg font-semibold text-stone-800">
+                {result.filename}
+              </h2>
+              <div className="space-y-1 text-sm text-stone-500">
+                <p>资源 ID：{result.resource_id}</p>
+                <p>来源类型：{result.source_type}</p>
+                {result.source_url ? <p>来源链接：{result.source_url}</p> : null}
+                <p>处理状态：{result.status}</p>
+                <p>共 {result.pages} 页，提取了 {result.text.length} 个字符，分块 {result.chunks} 段</p>
+              </div>
+              <p className="mb-4 mt-2 text-xs text-stone-400">
+                向量索引：{result.embedded ? "已建立" : "未建立"}
+                {result.warning ? ` · ${result.warning}` : ""}
+              </p>
+
+              {result.knowledge_points.length > 0 ? (
+                <div className="mb-4">
+                  <h3 className="mb-2 text-sm font-medium text-stone-700">提取出的知识点</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {result.knowledge_points.map((point) => (
+                      <span
+                        key={point}
+                        className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700"
+                      >
+                        {point}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="max-h-96 overflow-y-auto rounded-xl bg-stone-50 p-4 text-sm text-stone-700">
+                <pre className="whitespace-pre-wrap">{result.text.slice(0, 3000)}</pre>
+                {result.text.length > 3000 ? (
+                  <p className="mt-2 text-stone-400">...（已截断显示前 3000 字符）</p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </MainShell>
   );
 }

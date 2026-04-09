@@ -53,3 +53,17 @@ export interface KnowledgeGraph {
   nodes: KnowledgeNode[];
   edges: KnowledgeEdge[];
 }
+
+export interface ResourceUploadResult {
+  resource_id: string;
+  filename: string;
+  text: string;
+  pages: number;
+  chunks: number;
+  embedded: boolean;
+  status: string;
+  source_type: string;
+  source_url?: string;
+  knowledge_points: string[];
+  warning?: string;
+}

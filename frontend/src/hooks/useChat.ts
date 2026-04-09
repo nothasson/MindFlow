@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { sendMessageStream } from "@/lib/api";
+import { sendMessageStream, sendEchoStream } from "@/lib/api";
 import type { Message } from "@/lib/types";
 
 export function useChat() {
@@ -22,7 +22,11 @@ export function useChat() {
       const trimmed = content.trim();
       if (!trimmed || isLoading) return;
 
-      const userMessage: Message = { role: "user", content: trimmed };
+      // /echo 命令：走回声测试接口，用于测试 Markdown/Mermaid 渲染
+      const isEcho = trimmed.startsWith("/echo ");
+      const displayContent = isEcho ? trimmed.slice(6) : trimmed;
+
+      const userMessage: Message = { role: "user", content: displayContent };
       const nextMessages = [...messagesRef.current, userMessage];
 
       const assistantPlaceholder: Message = { role: "assistant", content: "" };
@@ -31,46 +35,49 @@ export function useChat() {
       setIsLoading(true);
       setIsStreaming(true);
 
-      await sendMessageStream(
-        nextMessages,
-        conversationId,
-        // onChunk
-        (chunk) => {
-          setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last.role === "assistant") {
-              updated[updated.length - 1] = {
-                ...last,
-                content: last.content + chunk,
-              };
-            }
-            return updated;
-          });
-        },
-        // onDone
-        () => {
-          setIsLoading(false);
-          setIsStreaming(false);
-        },
-        // onError
-        (errMsg) => {
-          setError(errMsg);
-          setIsLoading(false);
-          setIsStreaming(false);
-          setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last.role === "assistant" && last.content === "") {
-              return prev.slice(0, -1);
-            }
-            return prev;
-          });
-        },
-        // onConversationId
-        (id) => {
-          setConversationId(id);
-        },
-      );
+      // 共用的回调
+      const onChunk = (chunk: string) => {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last.role === "assistant") {
+            updated[updated.length - 1] = {
+              ...last,
+              content: last.content + chunk,
+            };
+          }
+          return updated;
+        });
+      };
+      const onDone = () => {
+        setIsLoading(false);
+        setIsStreaming(false);
+      };
+      const onError = (errMsg: string) => {
+        setError(errMsg);
+        setIsLoading(false);
+        setIsStreaming(false);
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last.role === "assistant" && last.content === "") {
+            return prev.slice(0, -1);
+          }
+          return prev;
+        });
+      };
+
+      if (isEcho) {
+        await sendEchoStream(displayContent, onChunk, onDone, onError);
+      } else {
+        await sendMessageStream(
+          nextMessages,
+          conversationId,
+          onChunk,
+          onDone,
+          onError,
+          (id) => { setConversationId(id); },
+        );
+      }
     },
     [isLoading, conversationId],
   );

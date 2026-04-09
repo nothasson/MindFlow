@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la *.md)",
+      "Bash(ls -la plan*)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js|jsx|json\\)$\")",
+      "Bash(xargs cat:*)",
+      "Bash(grep -E \"\\\\.go$\")"
+    ]
+  }
+}

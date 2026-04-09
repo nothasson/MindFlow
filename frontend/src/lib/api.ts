@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, Conversation, KnowledgeGraph, Message, SSEEvent } from "@/lib/types";
+import type { ChatRequest, ChatResponse, Conversation, KnowledgeGraph, Message, ResourceUploadResult, SSEEvent } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -154,5 +154,95 @@ export async function deleteConversation(id: string): Promise<void> {
 export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
   const response = await fetch(`${API_URL}/api/knowledge/graph`);
   if (!response.ok) throw new Error("获取知识图谱失败");
+  return response.json();
+}
+
+/** 回声测试：逐字流式返回用户内容，用于测试 Markdown/Mermaid 渲染和打字机效果 */
+export async function sendEchoStream(
+  content: string,
+  onChunk: (text: string) => void,
+  onDone: () => void,
+  onError: (error: string) => void,
+): Promise<void> {
+  try {
+    const response = await fetch(`${API_URL}/api/echo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, delay_ms: 30 }),
+    });
+
+    if (!response.ok) {
+      const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+      onError(errorBody?.error || `请求失败 (${response.status})`);
+      return;
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      onError("浏览器不支持流式读取");
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+
+        const jsonStr = trimmed.startsWith("data: ") ? trimmed.slice(6) : trimmed.slice(5);
+        try {
+          const event = JSON.parse(jsonStr) as SSEEvent;
+          if (event.error) { onError(event.error); reader.cancel(); return; }
+          if (event.done) { onDone(); return; }
+          if (event.content) { onChunk(event.content); }
+        } catch { /* 跳过 */ }
+      }
+    }
+    onDone();
+  } catch (err) {
+    onError(err instanceof Error ? err.message : "echo 请求失败");
+  }
+}
+
+/** 上传资料并通过后端转发给 AI 服务 */
+export async function uploadResource(file: File): Promise<ResourceUploadResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_URL}/api/resources/upload`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(errorBody?.error || `上传失败 (${response.status})`);
+  }
+
+  return response.json();
+}
+
+/** 导入网页链接并通过后端转发给 AI 服务 */
+export async function importUrlResource(url: string): Promise<ResourceUploadResult> {
+  const response = await fetch(`${API_URL}/api/resources/import-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(errorBody?.error || `导入失败 (${response.status})`);
+  }
+
   return response.json();
 }

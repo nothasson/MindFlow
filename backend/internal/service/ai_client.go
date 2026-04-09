@@ -46,6 +46,31 @@ type EmbedResponse struct {
 	Dimension  int         `json:"dimension"`
 }
 
+// UpsertRequest 向量写入请求。
+type UpsertRequest struct {
+	Collection string            `json:"collection"`
+	Texts      []string          `json:"texts"`
+	Embeddings [][]float64       `json:"embeddings"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+}
+
+// UpsertResponse 向量写入响应。
+type UpsertResponse struct {
+	Inserted int `json:"inserted"`
+}
+
+// ParseURLRequest URL 解析请求。
+type ParseURLRequest struct {
+	URL string `json:"url"`
+}
+
+// ParseURLResponse URL 解析响应。
+type ParseURLResponse struct {
+	Text      string `json:"text"`
+	Title     string `json:"title"`
+	SourceURL string `json:"source_url"`
+}
+
 // SearchRequest 向量搜索请求
 type SearchRequest struct {
 	Query      string `json:"query"`
@@ -63,6 +88,23 @@ type SearchResult struct {
 // SearchResponse 搜索响应
 type SearchResponse struct {
 	Results []SearchResult `json:"results"`
+}
+
+// ExtractRequest 知识点提取请求。
+type ExtractRequest struct {
+	Text string `json:"text"`
+}
+
+// KnowledgePoint 提取出的知识点。
+type KnowledgePoint struct {
+	Concept       string   `json:"concept"`
+	Description   string   `json:"description"`
+	Prerequisites []string `json:"prerequisites"`
+}
+
+// ExtractResponse 知识点提取响应。
+type ExtractResponse struct {
+	Points []KnowledgePoint `json:"points"`
 }
 
 // --- API 方法 ---
@@ -104,6 +146,31 @@ func (c *AIClient) Embed(texts []string) (*EmbedResponse, error) {
 	return &result, nil
 }
 
+// ParseURL 解析网页正文。
+func (c *AIClient) ParseURL(url string) (*ParseURLResponse, error) {
+	body := ParseURLRequest{URL: url}
+	var result ParseURLResponse
+	if err := c.postJSON("/parse-url", body, &result); err != nil {
+		return nil, fmt.Errorf("URL 解析失败: %w", err)
+	}
+	return &result, nil
+}
+
+// Upsert 将文本和向量写入向量库。
+func (c *AIClient) Upsert(collection string, texts []string, embeddings [][]float64, metadata map[string]string) (*UpsertResponse, error) {
+	body := UpsertRequest{
+		Collection: collection,
+		Texts:      texts,
+		Embeddings: embeddings,
+		Metadata:   metadata,
+	}
+	var result UpsertResponse
+	if err := c.postJSON("/upsert", body, &result); err != nil {
+		return nil, fmt.Errorf("向量写入失败: %w", err)
+	}
+	return &result, nil
+}
+
 // Search 向量相似度搜索
 func (c *AIClient) Search(query, collection string, limit int) (*SearchResponse, error) {
 	body := SearchRequest{
@@ -114,6 +181,16 @@ func (c *AIClient) Search(query, collection string, limit int) (*SearchResponse,
 	var result SearchResponse
 	if err := c.postJSON("/search", body, &result); err != nil {
 		return nil, fmt.Errorf("向量搜索失败: %w", err)
+	}
+	return &result, nil
+}
+
+// ExtractKnowledgePoints 提取资料中的知识点。
+func (c *AIClient) ExtractKnowledgePoints(text string) (*ExtractResponse, error) {
+	body := ExtractRequest{Text: text}
+	var result ExtractResponse
+	if err := c.postJSON("/extract", body, &result); err != nil {
+		return nil, fmt.Errorf("知识点提取失败: %w", err)
 	}
 	return &result, nil
 }

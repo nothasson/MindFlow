@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ParseResponse(BaseModel):
@@ -16,6 +16,27 @@ class EmbedResponse(BaseModel):
     dimension: int
 
 
+class UpsertRequest(BaseModel):
+    collection: str = "documents"
+    texts: list[str]
+    embeddings: list[list[float]]
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class UpsertResponse(BaseModel):
+    inserted: int
+
+
+class URLParseRequest(BaseModel):
+    url: str
+
+
+class URLParseResponse(BaseModel):
+    text: str
+    title: str
+    source_url: str
+
+
 class SearchRequest(BaseModel):
     query: str
     collection: str = "documents"
@@ -25,7 +46,7 @@ class SearchRequest(BaseModel):
 class SearchResult(BaseModel):
     text: str
     score: float
-    metadata: dict = {}
+    metadata: dict = Field(default_factory=dict)
 
 
 class SearchResponse(BaseModel):
@@ -38,8 +59,8 @@ class ExtractRequest(BaseModel):
 
 class KnowledgePoint(BaseModel):
     concept: str
-    description: str
-    prerequisites: list[str] = []
+    description: str = ""
+    prerequisites: list[str] = Field(default_factory=list)
 
 
 class ExtractResponse(BaseModel):

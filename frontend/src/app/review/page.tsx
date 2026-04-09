@@ -1,5 +1,7 @@
 "use client";
 
+import { MainShell } from "@/components/layout/MainShell";
+
 const daysOfWeek = ["一", "二", "三", "四", "五", "六", "日"];
 
 function generateCalendarDays(): { day: number; isToday: boolean; hasTasks: boolean }[] {
@@ -26,8 +28,9 @@ export default function ReviewPage() {
   const monthName = `${now.getFullYear()} 年 ${now.getMonth() + 1} 月`;
 
   return (
-    <div className="flex h-full flex-col bg-[#EEECE2]">
-      <div className="mx-auto w-full max-w-4xl px-4 py-12">
+    <MainShell>
+      <div className="flex h-full flex-col bg-[#EEECE2]">
+        <div className="mx-auto w-full max-w-4xl px-4 py-12">
         <h1 className="mb-2 text-2xl font-semibold text-stone-800">复习计划</h1>
         <p className="mb-8 text-sm text-stone-500">
           基于遗忘曲线自动安排复习，确保知识长期记忆。
@@ -70,7 +73,8 @@ export default function ReviewPage() {
           <h2 className="mb-4 text-lg font-semibold text-stone-800">即将到期</h2>
           <p className="text-sm text-stone-400">暂无即将到期的复习项</p>
         </div>
+        </div>
       </div>
-    </div>
+    </MainShell>
   );
 }

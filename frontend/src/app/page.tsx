@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState, startTransition } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageList } from "@/components/chat/MessageList";
+import { BrandMark } from "@/components/layout/BrandMark";
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { useChat } from "@/hooks/useChat";
@@ -11,6 +13,7 @@ import { getConversations, getConversation, deleteConversation } from "@/lib/api
 import type { Conversation } from "@/lib/types";
 
 export default function Home() {
+  const searchParams = useSearchParams();
   const {
     messages,
     isLoading,
@@ -23,6 +26,7 @@ export default function Home() {
   } = useChat();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const requestedConversationId = searchParams?.get("conversation") ?? null;
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -83,10 +87,19 @@ export default function Home() {
     newConversation();
   }, [newConversation]);
 
+  useEffect(() => {
+    if (!requestedConversationId || requestedConversationId === conversationId) {
+      return;
+    }
+
+    handleSelectConversation(requestedConversationId);
+  }, [requestedConversationId, conversationId, handleSelectConversation]);
+
   const hasMessages = messages.length > 0;
 
   return (
     <AppShell
+      onNewChat={handleNewChat}
       sidebar={(onCollapse) => (
         <Sidebar
           conversations={conversations}
@@ -101,7 +114,7 @@ export default function Home() {
       {!hasMessages ? (
         <div className="flex flex-1 flex-col items-center px-4 pt-[28vh]">
           <div className="mb-10 flex items-center gap-4">
-            <span className="text-4xl text-[#C67A4A]">✺</span>
+            <BrandMark className="h-10 w-10 text-[#C67A4A]" />
             <h1
               className="text-5xl tracking-tight text-stone-800 sm:text-[3.5rem]"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}

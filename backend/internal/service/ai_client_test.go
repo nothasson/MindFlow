@@ -127,6 +127,42 @@ func TestAIClient_ParseDocument(t *testing.T) {
 	}
 }
 
+func TestAIClient_ParseURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/parse-url" || r.Method != "POST" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+
+		var req ParseURLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request failed: %v", err)
+		}
+		if req.URL != "https://example.com/article" {
+			t.Errorf("unexpected url: %s", req.URL)
+		}
+
+		resp := ParseURLResponse{
+			Text:      "这是网页正文",
+			Title:     "示例文章",
+			SourceURL: req.URL,
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewAIClient(server.URL)
+	result, err := client.ParseURL("https://example.com/article")
+	if err != nil {
+		t.Fatalf("ParseURL() error: %v", err)
+	}
+	if result.Title != "示例文章" {
+		t.Errorf("expected title 示例文章, got %s", result.Title)
+	}
+	if result.SourceURL != "https://example.com/article" {
+		t.Errorf("unexpected source url: %s", result.SourceURL)
+	}
+}
+
 func TestAIClient_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -138,5 +174,79 @@ func TestAIClient_ServerError(t *testing.T) {
 	_, err := client.Embed([]string{"test"})
 	if err == nil {
 		t.Fatal("expected error for server error response")
+	}
+}
+
+func TestAIClient_Upsert(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/upsert" || r.Method != "POST" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+
+		var req UpsertRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request failed: %v", err)
+		}
+		if req.Collection != "documents" {
+			t.Errorf("expected collection documents, got %s", req.Collection)
+		}
+		if len(req.Texts) != 2 {
+			t.Errorf("expected 2 texts, got %d", len(req.Texts))
+		}
+		if req.Metadata["resource_id"] != "res-1" {
+			t.Errorf("expected metadata resource_id res-1, got %s", req.Metadata["resource_id"])
+		}
+
+		resp := UpsertResponse{Inserted: 2}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewAIClient(server.URL)
+	result, err := client.Upsert("documents", []string{"A", "B"}, [][]float64{{0.1, 0.2}, {0.3, 0.4}}, map[string]string{"resource_id": "res-1"})
+	if err != nil {
+		t.Fatalf("Upsert() error: %v", err)
+	}
+	if result.Inserted != 2 {
+		t.Errorf("expected inserted 2, got %d", result.Inserted)
+	}
+}
+
+func TestAIClient_ExtractKnowledgePoints(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/extract" || r.Method != "POST" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+
+		var req ExtractRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request failed: %v", err)
+		}
+		if req.Text != "线性代数关注向量空间。" {
+			t.Errorf("unexpected text: %s", req.Text)
+		}
+
+		resp := ExtractResponse{
+			Points: []KnowledgePoint{
+				{Concept: "向量空间", Description: "线性代数的基础对象", Prerequisites: []string{"集合"}},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewAIClient(server.URL)
+	result, err := client.ExtractKnowledgePoints("线性代数关注向量空间。")
+	if err != nil {
+		t.Fatalf("ExtractKnowledgePoints() error: %v", err)
+	}
+	if len(result.Points) != 1 {
+		t.Fatalf("expected 1 point, got %d", len(result.Points))
+	}
+	if result.Points[0].Concept != "向量空间" {
+		t.Errorf("expected concept 向量空间, got %s", result.Points[0].Concept)
+	}
+	if len(result.Points[0].Prerequisites) != 1 || result.Points[0].Prerequisites[0] != "集合" {
+		t.Errorf("unexpected prerequisites: %+v", result.Points[0].Prerequisites)
 	}
 }

@@ -189,6 +189,7 @@
 - [ ] `main.go` 中 `aiClient` 为 `nil` 时 `ResourceHandler` 可能空指针 → 确认 Upload 内部有 nil 检查，或在路由注册时跳过该路由
 - [ ] `dreaming.go` 步骤 4（写 MEMORY.md）成功但步骤 5（生成总结）失败时部分完成状态 → 实现幂等性校验或事务性操作
 - [ ] `store.go` Search 返回整个日志文件内容拼入 LLM prompt 可能超 token → 改为返回匹配片段而非全文
+- [ ] 侧栏“新建对话/删除当前会话”未同步清理 `?conversation=` URL 参数 → 统一改为路由级清理并补回归测试
 
 ---
 

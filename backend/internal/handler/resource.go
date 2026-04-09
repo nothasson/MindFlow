@@ -4,28 +4,62 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/google/uuid"
 
+	"github.com/nothasson/MindFlow/backend/internal/model"
+	"github.com/nothasson/MindFlow/backend/internal/repository"
 	"github.com/nothasson/MindFlow/backend/internal/service"
 )
 
-// ResourceHandler 资料上传处理器
-type ResourceHandler struct {
-	aiClient *service.AIClient
+// resourceAIClient 抽象 AI 微服务能力，便于测试。
+type resourceAIClient interface {
+	ParseDocument(fileContent []byte, filename string) (*service.ParseResponse, error)
+	ParseURL(url string) (*service.ParseURLResponse, error)
+	Embed(texts []string) (*service.EmbedResponse, error)
+	Upsert(collection string, texts []string, embeddings [][]float64, metadata map[string]string) (*service.UpsertResponse, error)
+	ExtractKnowledgePoints(text string) (*service.ExtractResponse, error)
 }
 
-// NewResourceHandler 创建资料处理器
-func NewResourceHandler(aiClient *service.AIClient) *ResourceHandler {
-	return &ResourceHandler{aiClient: aiClient}
+// resourceStore 抽象资料存储能力，便于测试。
+type resourceStore interface {
+	Create(ctx context.Context, resource *model.Resource) (*model.Resource, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string, chunkCount int) error
+}
+
+// knowledgeWriter 抽象知识点写入能力，便于测试。
+type knowledgeWriter interface {
+	UpsertExtractedPoints(ctx context.Context, points []repository.ExtractedKnowledgePoint) error
+}
+
+// URLImportRequest URL 导入请求。
+type URLImportRequest struct {
+	URL string `json:"url"`
+}
+
+// ResourceHandler 资料上传处理器。
+type ResourceHandler struct {
+	aiClient        resourceAIClient
+	resourceStore   resourceStore
+	knowledgeWriter knowledgeWriter
+}
+
+// NewResourceHandler 创建资料处理器。
+func NewResourceHandler(aiClient resourceAIClient, resourceStore resourceStore, knowledgeWriter knowledgeWriter) *ResourceHandler {
+	return &ResourceHandler{
+		aiClient:        aiClient,
+		resourceStore:   resourceStore,
+		knowledgeWriter: knowledgeWriter,
+	}
 }
 
 // Upload POST /api/resources/upload
-// 接收前端上传的文件，调用 AI 微服务解析，然后生成 Embedding 存入向量库
+// 接收前端上传的文件，调用 AI 微服务解析，并将资料持久化到数据库与向量库。
 func (h *ResourceHandler) Upload(ctx context.Context, c *app.RequestContext) {
-	if h.aiClient == nil {
-		c.JSON(http.StatusServiceUnavailable, utils.H{"error": "AI 微服务不可用"})
+	if err := h.ensureReady(c); err != nil {
 		return
 	}
 
@@ -48,43 +82,178 @@ func (h *ResourceHandler) Upload(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// 1. 调用 AI 微服务解析文档
 	parseResult, err := h.aiClient.ParseDocument(content, file.Filename)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "文档解析失败: " + err.Error()})
 		return
 	}
 
-	// 2. 将解析文本分块并生成 Embedding 存入向量库
-	chunks := splitText(parseResult.Text, 500)
-	if len(chunks) > 0 {
-		embedResult, err := h.aiClient.Embed(chunks)
-		if err != nil {
-			// Embedding 失败不阻塞，记录日志即可
-			c.JSON(http.StatusOK, utils.H{
-				"filename": parseResult.Filename,
-				"pages":    parseResult.Pages,
-				"text":     parseResult.Text,
-				"chunks":   len(chunks),
-				"embedded": false,
-				"warning":  "Embedding 生成失败: " + err.Error(),
-			})
-			return
-		}
-
-		_ = embedResult // 后续可以调用 vector store 的 upsert
-	}
-
-	c.JSON(http.StatusOK, utils.H{
-		"filename": parseResult.Filename,
-		"pages":    parseResult.Pages,
-		"text":     parseResult.Text,
-		"chunks":   len(chunks),
-		"embedded": true,
+	h.ingestResource(ctx, c, ingestInput{
+		SourceType:       "file",
+		Title:            parseResult.Filename,
+		DisplayName:      parseResult.Filename,
+		OriginalFilename: parseResult.Filename,
+		ContentText:      parseResult.Text,
+		Pages:            parseResult.Pages,
 	})
 }
 
-// splitText 简单按字符数分块
+// ImportURL POST /api/resources/import-url
+// 导入网页链接并将正文纳入学习资料管线。
+func (h *ResourceHandler) ImportURL(ctx context.Context, c *app.RequestContext) {
+	if err := h.ensureReady(c); err != nil {
+		return
+	}
+
+	var req URLImportRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "请求格式错误: " + err.Error()})
+		return
+	}
+	url := strings.TrimSpace(req.URL)
+	if url == "" {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "URL 不能为空"})
+		return
+	}
+
+	parseResult, err := h.aiClient.ParseURL(url)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "URL 解析失败: " + err.Error()})
+		return
+	}
+
+	displayName := strings.TrimSpace(parseResult.Title)
+	if displayName == "" {
+		displayName = url
+	}
+
+	h.ingestResource(ctx, c, ingestInput{
+		SourceType:       "url",
+		Title:            displayName,
+		DisplayName:      displayName,
+		OriginalFilename: displayName,
+		SourceURL:        parseResult.SourceURL,
+		ContentText:      parseResult.Text,
+		Pages:            1,
+	})
+}
+
+type ingestInput struct {
+	SourceType       string
+	Title            string
+	DisplayName      string
+	OriginalFilename string
+	SourceURL        string
+	ContentText      string
+	Pages            int
+}
+
+func (h *ResourceHandler) ensureReady(c *app.RequestContext) error {
+	if h.aiClient == nil {
+		c.JSON(http.StatusServiceUnavailable, utils.H{"error": "AI 微服务不可用"})
+		return http.ErrServerClosed
+	}
+	if h.resourceStore == nil {
+		c.JSON(http.StatusServiceUnavailable, utils.H{"error": "资料存储不可用"})
+		return http.ErrServerClosed
+	}
+	return nil
+}
+
+func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestContext, input ingestInput) {
+	chunks := splitText(input.ContentText, 500)
+	resource, err := h.resourceStore.Create(ctx, &model.Resource{
+		SourceType:       input.SourceType,
+		Title:            input.Title,
+		OriginalFilename: input.OriginalFilename,
+		SourceURL:        input.SourceURL,
+		ContentText:      input.ContentText,
+		Pages:            input.Pages,
+		ChunkCount:       len(chunks),
+		Status:           "parsed",
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "保存资料失败: " + err.Error()})
+		return
+	}
+
+	response := utils.H{
+		"resource_id":      resource.ID.String(),
+		"filename":         input.DisplayName,
+		"pages":            input.Pages,
+		"text":             input.ContentText,
+		"chunks":           len(chunks),
+		"embedded":         false,
+		"status":           "parsed",
+		"source_type":      input.SourceType,
+		"source_url":       input.SourceURL,
+		"knowledge_points": []string{},
+	}
+	warnings := make([]string, 0, 2)
+
+	if len(chunks) > 0 {
+		embedResult, err := h.aiClient.Embed(chunks)
+		if err != nil {
+			warnings = append(warnings, "Embedding 生成失败: "+err.Error())
+		} else {
+			_, err = h.aiClient.Upsert("documents", chunks, embedResult.Embeddings, map[string]string{
+				"resource_id": resource.ID.String(),
+				"filename":    input.DisplayName,
+				"source_type": input.SourceType,
+				"source_url":  input.SourceURL,
+			})
+			if err != nil {
+				warnings = append(warnings, "向量写入失败: "+err.Error())
+			} else {
+				response["embedded"] = true
+				response["status"] = "indexed"
+			}
+		}
+	}
+
+	extractResult, err := h.aiClient.ExtractKnowledgePoints(input.ContentText)
+	if err != nil {
+		warnings = append(warnings, "知识点提取失败: "+err.Error())
+	} else if h.knowledgeWriter != nil {
+		points := make([]repository.ExtractedKnowledgePoint, 0, len(extractResult.Points))
+		names := make([]string, 0, len(extractResult.Points))
+		for _, point := range extractResult.Points {
+			if point.Concept == "" {
+				continue
+			}
+			points = append(points, repository.ExtractedKnowledgePoint{
+				Concept:       point.Concept,
+				Description:   point.Description,
+				Prerequisites: point.Prerequisites,
+			})
+			names = append(names, point.Concept)
+		}
+		if len(points) > 0 {
+			if err := h.knowledgeWriter.UpsertExtractedPoints(ctx, points); err != nil {
+				warnings = append(warnings, "知识图谱写入失败: "+err.Error())
+			} else {
+				response["knowledge_points"] = names
+				if response["status"] == "indexed" {
+					response["status"] = "ready"
+				}
+			}
+		}
+	}
+
+	status, _ := response["status"].(string)
+	if err := h.resourceStore.UpdateStatus(ctx, resource.ID, status, len(chunks)); err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "更新资料状态失败: " + err.Error()})
+		return
+	}
+
+	if len(warnings) > 0 {
+		response["warning"] = warnings[0]
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// splitText 简单按字符数分块。
 func splitText(text string, chunkSize int) []string {
 	runes := []rune(text)
 	if len(runes) == 0 {

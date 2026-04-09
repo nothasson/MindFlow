@@ -1,6 +1,6 @@
-# CODEBUDDY.md
+# CLAUDE.md
 
-本文件为 CodeBuddy Code 在此仓库中工作时提供指引。
+本文件为 Claude Code 在此仓库中工作时提供指引。
 
 ## 项目概述
 
@@ -211,7 +211,7 @@ docker compose -f docker-compose.yml up -d
 
 ### 6. 代码提交前必须 Review
 
-每轮代码修改完成后，必须运行 `/review`（隔离上下文子 agent）做代码审查。流程：
+每轮代码修改完成后，必须运行 `/review`（隔离上下文命令）做代码审查。流程：
 
 1. 写完代码 + 跑通测试
 2. 运行 `/review`，等待 review 结果

@@ -41,6 +41,7 @@ func main() {
 	// 初始化 Repository
 	convRepo := repository.NewConversationRepo(db)
 	msgRepo := repository.NewMessageRepo(db)
+	resourceRepo := repository.NewResourceRepo(db)
 
 	// 初始化 LLM 客户端
 	chatModel, err := llm.NewChatModel(ctx, cfg)
@@ -88,7 +89,7 @@ func main() {
 	// 初始化 Handler
 	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
-	resourceHandler := handler.NewResourceHandler(aiClient)
+	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)
 
 	// 创建 Hertz 服务器
@@ -129,10 +130,18 @@ func main() {
 	h.POST("/api/resources/upload", func(ctx context.Context, c *app.RequestContext) {
 		resourceHandler.Upload(ctx, c)
 	})
+	h.POST("/api/resources/import-url", func(ctx context.Context, c *app.RequestContext) {
+		resourceHandler.ImportURL(ctx, c)
+	})
 
 	// 知识图谱路由
 	h.GET("/api/knowledge/graph", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.Graph(ctx, c)
+	})
+
+	// 开发测试：回声接口，逐字流式返回用户内容，用于测试 Markdown/Mermaid 渲染和打字机效果
+	h.POST("/api/echo", func(ctx context.Context, c *app.RequestContext) {
+		handler.HandleEcho(ctx, c)
 	})
 
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)

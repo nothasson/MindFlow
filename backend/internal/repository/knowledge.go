@@ -22,10 +22,17 @@ type KnowledgeNode struct {
 
 // KnowledgeEdge 知识点关系边
 type KnowledgeEdge struct {
-	ID           string  `json:"id"`
-	FromConcept  string  `json:"from"`
-	RelationType string  `json:"relation_type"`
-	ToConcept    string  `json:"to"`
+	ID           string `json:"id"`
+	FromConcept  string `json:"from"`
+	RelationType string `json:"relation_type"`
+	ToConcept    string `json:"to"`
+}
+
+// ExtractedKnowledgePoint 资料解析后提取出的知识点。
+type ExtractedKnowledgePoint struct {
+	Concept       string
+	Description   string
+	Prerequisites []string
 }
 
 // KnowledgeRepo 知识图谱数据访问
@@ -83,4 +90,39 @@ func (r *KnowledgeRepo) ListEdges(ctx context.Context) ([]KnowledgeEdge, error) 
 		edges = append(edges, e)
 	}
 	return edges, nil
+}
+
+// UpsertExtractedPoints 写入资料提取出的知识点及前置关系。
+func (r *KnowledgeRepo) UpsertExtractedPoints(ctx context.Context, points []ExtractedKnowledgePoint) error {
+	for _, point := range points {
+		if _, err := r.pool.Exec(ctx, `
+			INSERT INTO knowledge_mastery (concept, confidence, updated_at)
+			VALUES ($1, 0.0, NOW())
+			ON CONFLICT (concept)
+			DO UPDATE SET updated_at = NOW()
+		`, point.Concept); err != nil {
+			return err
+		}
+
+		for _, prerequisite := range point.Prerequisites {
+			if _, err := r.pool.Exec(ctx, `
+				INSERT INTO knowledge_mastery (concept, confidence, updated_at)
+				VALUES ($1, 0.0, NOW())
+				ON CONFLICT (concept)
+				DO UPDATE SET updated_at = NOW()
+			`, prerequisite); err != nil {
+				return err
+			}
+
+			if _, err := r.pool.Exec(ctx, `
+				INSERT INTO knowledge_relations (from_concept, relation_type, to_concept)
+				VALUES ($1, 'prerequisite', $2)
+				ON CONFLICT (from_concept, relation_type, to_concept)
+				DO NOTHING
+			`, point.Concept, prerequisite); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
