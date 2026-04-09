@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"log"
+	"strings"
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
@@ -21,8 +24,7 @@ const OrchestratorSystemPrompt = `你是 MindFlow 的教学调度器。你的职
 - "diagnostic": 诊断学生回答的错误类型（当学生给出了明确的答案需要评估时）
 - "quiz": 出题测验（当学生要求测试或需要检验掌握度时）
 - "curriculum": 学习规划（当学生问"接下来学什么"或需要复习建议时）
-
-当前阶段只有 tutor 可用，其他 agent 尚未实现，统一路由到 tutor。
+- "content": 基于资料内容教学（当学生提到资料、文档、上传内容，或问题涉及已上传资料的内容时）
 
 注意：
 - 只输出 JSON，不要输出其他内容
@@ -37,6 +39,7 @@ const (
 	AgentTypeDiagnostic AgentType = "diagnostic"
 	AgentTypeQuiz       AgentType = "quiz"
 	AgentTypeCurriculum AgentType = "curriculum"
+	AgentTypeContent    AgentType = "content"
 )
 
 // RouteDecision 路由决策
@@ -54,6 +57,7 @@ type Orchestrator struct {
 	quiz       *QuizAgent
 	review     *ReviewAgent
 	curriculum *CurriculumAgent
+	content    *ContentAgent
 }
 
 // NewOrchestrator 创建调度器
@@ -73,6 +77,11 @@ func (o *Orchestrator) SetMemoryAgent(memAgent *MemoryAgent) {
 	o.memAgent = memAgent
 }
 
+// SetContentAgent 设置内容 Agent（可选，依赖 AI 微服务客户端）
+func (o *Orchestrator) SetContentAgent(content *ContentAgent) {
+	o.content = content
+}
+
 // Chat 根据路由决策调度对话（非流式）
 func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (string, error) {
 	decision, _ := o.Route(ctx, messages)
@@ -84,6 +93,11 @@ func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (st
 		return o.curriculum.Plan(ctx, messages)
 	case AgentTypeDiagnostic:
 		return o.diagnostic.Diagnose(ctx, messages)
+	case AgentTypeContent:
+		if o.content != nil {
+			return o.content.Chat(ctx, messages)
+		}
+		return o.tutor.Chat(ctx, messages)
 	default:
 		return o.tutor.Chat(ctx, messages)
 	}
@@ -100,28 +114,80 @@ func (o *Orchestrator) ChatStream(ctx context.Context, messages []*schema.Messag
 		return o.curriculum.PlanStream(ctx, messages)
 	case AgentTypeDiagnostic:
 		return o.diagnostic.DiagnoseStream(ctx, messages)
+	case AgentTypeContent:
+		if o.content != nil {
+			return o.content.ChatStream(ctx, messages)
+		}
+		return o.tutor.ChatStream(ctx, messages)
 	default:
 		return o.tutor.ChatStream(ctx, messages)
 	}
 }
 
-// Route 分析消息并返回路由决策（预留，当前不调用 LLM 路由）
+// Route 调用 LLM 分析消息意图并返回路由决策
 func (o *Orchestrator) Route(ctx context.Context, messages []*schema.Message) (*RouteDecision, error) {
 	if len(messages) == 0 {
 		return &RouteDecision{Agent: AgentTypeTutor, Reason: "无消息，默认教学"}, nil
 	}
 
+	// 构建路由 prompt，只发最后一条用户消息给 LLM 判断
 	lastMsg := messages[len(messages)-1]
 
-	// 简单规则路由（不消耗 LLM token）
-	switch {
-	case containsKeyword(lastMsg.Content, "出题", "测试", "考考我", "检验"):
-		return &RouteDecision{Agent: AgentTypeQuiz, Reason: "学生请求出题测验"}, nil
-	case containsKeyword(lastMsg.Content, "接下来学什么", "复习", "学习计划", "建议学"):
-		return &RouteDecision{Agent: AgentTypeCurriculum, Reason: "学生请求学习规划"}, nil
-	default:
-		return &RouteDecision{Agent: AgentTypeTutor, Reason: "默认苏格拉底式教学"}, nil
+	// 动态构建可用 agent 列表（content 仅在 aiClient 可用时列出）
+	prompt := o.buildRoutePrompt()
+
+	routeMessages := []*schema.Message{
+		schema.SystemMessage(prompt),
+		schema.UserMessage(lastMsg.Content),
 	}
+
+	resp, err := o.chatModel.Generate(ctx, routeMessages)
+	if err != nil {
+		log.Printf("路由 LLM 调用失败，回退到 tutor: %v", err)
+		return &RouteDecision{Agent: AgentTypeTutor, Reason: "LLM 路由失败，回退默认"}, nil
+	}
+
+	// 解析 JSON 决策
+	var decision RouteDecision
+	cleaned := cleanJSON(resp.Content)
+	if err := json.Unmarshal([]byte(cleaned), &decision); err != nil {
+		log.Printf("路由决策解析失败，回退到 tutor: %s", resp.Content)
+		return &RouteDecision{Agent: AgentTypeTutor, Reason: "决策解析失败，回退默认"}, nil
+	}
+
+	// 校验：content agent 不可用时回退
+	if decision.Agent == AgentTypeContent && o.content == nil {
+		decision.Agent = AgentTypeTutor
+		decision.Reason += "（content agent 不可用，回退到 tutor）"
+	}
+
+	return &decision, nil
+}
+
+// buildRoutePrompt 动态构建路由 prompt，只列出实际可用的 agent
+func (o *Orchestrator) buildRoutePrompt() string {
+	prompt := OrchestratorSystemPrompt
+	if o.content == nil {
+		// 从 prompt 中移除 content agent 的描述，避免 LLM 路由到不可用的 agent
+		prompt = strings.Replace(prompt,
+			"- \"content\": 基于资料内容教学（当学生提到资料、文档、上传内容，或问题涉及已上传资料的内容时）\n", "", 1)
+	}
+	return prompt
+}
+
+// cleanJSON 从 LLM 响应中提取 JSON（处理可能的 markdown 包裹）
+func cleanJSON(s string) string {
+	s = strings.TrimSpace(s)
+	// 去除 ```json ... ``` 包裹
+	if strings.HasPrefix(s, "```") {
+		if idx := strings.Index(s[3:], "\n"); idx >= 0 {
+			s = s[3+idx+1:]
+		}
+		if idx := strings.LastIndex(s, "```"); idx >= 0 {
+			s = s[:idx]
+		}
+	}
+	return strings.TrimSpace(s)
 }
 
 // GetAgent 根据类型返回对应 Agent（当前只有 tutor）
@@ -133,22 +199,4 @@ func (o *Orchestrator) GetAgent(agentType AgentType) interface{} {
 		// 其他 Agent 尚未实现，回退到 tutor
 		return o.tutor
 	}
-}
-
-func containsKeyword(text string, keywords ...string) bool {
-	for _, kw := range keywords {
-		if len(text) >= len(kw) {
-			for i := 0; i <= len(text)-len(kw); i++ {
-				if text[i:i+len(kw)] == kw {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-// containsKeyword 的更安全版本，使用 strings 包
-func init() {
-	// 预留：后续可在此注册新 Agent
 }

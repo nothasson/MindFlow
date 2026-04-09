@@ -120,6 +120,7 @@ docker-compose restart backend     # 重启指定服务
 - **TDD 驱动开发** — 先写失败的测试（Red），再写最小实现使其通过（Green），然后重构（Refactor）。所有核心逻辑（Agent、SM-2 算法、记忆系统）必须先有测试再实现。
 - **苏格拉底原则** — Tutor Agent 绝不直接给答案，所有教学回复必须是引导性提问或提示。测试必须验证这一不变性。
 - **记忆连续性** — 记忆系统必须维持跨 session 的状态。Dreaming Sweep 每日定时任务负责将短期记忆提炼为长期学习画像。
+- **AI Native，不是 Workflow** — 严禁用 `if/switch + 关键词匹配` 做 Agent 路由或决策。所有需要理解语义的判断（路由分发、意图识别、内容分类等）必须交给 LLM 决策。关键词匹配只能用于纯机械性操作（如命令解析），不能用于替代语义理解。这是 AI Native 产品和 workflow 工具的本质区别。
 
 ## 规则
 

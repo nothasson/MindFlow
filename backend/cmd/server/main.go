@@ -14,6 +14,7 @@ import (
 	"github.com/nothasson/MindFlow/backend/internal/handler"
 	"github.com/nothasson/MindFlow/backend/internal/llm"
 	"github.com/nothasson/MindFlow/backend/internal/repository"
+	"github.com/nothasson/MindFlow/backend/internal/service"
 )
 
 func main() {
@@ -38,9 +39,25 @@ func main() {
 		log.Fatalf("初始化 LLM 客户端失败: %v", err)
 	}
 
+	// 初始化 AI 微服务客户端
+	aiClient := service.NewAIClient("http://" + cfg.AIServiceAddr)
+	if err := aiClient.Health(); err != nil {
+		log.Printf("警告: AI 微服务不可达 (%s)，Content Agent 将不可用", err)
+		aiClient = nil
+	} else {
+		log.Println("AI 微服务连接成功")
+	}
+
 	// 初始化 Agent
 	tutor := agent.NewTutorAgent(chatModel)
 	orchestrator := agent.NewOrchestrator(chatModel, tutor)
+
+	// 注入 Content Agent（如果 AI 微服务可用）
+	if aiClient != nil {
+		content := agent.NewContentAgent(chatModel, aiClient)
+		orchestrator.SetContentAgent(content)
+		log.Println("Content Agent 已启用")
+	}
 
 	// 初始化 Handler
 	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo)

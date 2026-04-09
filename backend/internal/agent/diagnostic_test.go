@@ -2,13 +2,32 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
 
+type diagnosticMockChatModel struct{}
+
+func (m *diagnosticMockChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	return &schema.Message{
+		Role:    schema.Assistant,
+		Content: "诊断结果：概念错误，学生混淆了因式分解的根与系数关系",
+	}, nil
+}
+
+func (m *diagnosticMockChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	return nil, nil
+}
+
+func (m *diagnosticMockChatModel) BindTools(tools []*schema.ToolInfo) error {
+	return nil
+}
+
 func TestDiagnosticAgent_Diagnose(t *testing.T) {
-	mockModel := &orchestratorMockChatModel{}
+	mockModel := &diagnosticMockChatModel{}
 	diag := NewDiagnosticAgent(mockModel)
 
 	result, err := diag.Diagnose(context.Background(), []*schema.Message{
@@ -23,16 +42,15 @@ func TestDiagnosticAgent_Diagnose(t *testing.T) {
 }
 
 func TestDiagnosticAgent_SystemPrompt(t *testing.T) {
-	mockModel := &orchestratorMockChatModel{}
+	mockModel := &diagnosticMockChatModel{}
 	diag := NewDiagnosticAgent(mockModel)
 
 	if diag.systemPrompt == "" {
 		t.Error("system prompt 不应为空")
 	}
-	// 验证包含关键诊断词
 	keywords := []string{"概念错误", "方法错误", "粗心错误"}
 	for _, kw := range keywords {
-		if !containsKeyword(diag.systemPrompt, kw) {
+		if !strings.Contains(diag.systemPrompt, kw) {
 			t.Errorf("system prompt 应包含 %s", kw)
 		}
 	}
