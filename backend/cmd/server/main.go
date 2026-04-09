@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
@@ -13,6 +14,7 @@ import (
 	"github.com/nothasson/MindFlow/backend/internal/config"
 	"github.com/nothasson/MindFlow/backend/internal/handler"
 	"github.com/nothasson/MindFlow/backend/internal/llm"
+	"github.com/nothasson/MindFlow/backend/internal/memory"
 	"github.com/nothasson/MindFlow/backend/internal/repository"
 	"github.com/nothasson/MindFlow/backend/internal/service"
 )
@@ -59,9 +61,24 @@ func main() {
 		log.Println("Content Agent 已启用")
 	}
 
+	// 初始化记忆系统和 Dreaming Sweep
+	memStore, err := memory.NewStore(cfg.MemoryDir)
+	if err != nil {
+		log.Printf("警告: 记忆系统初始化失败: %v", err)
+	} else {
+		memAgent := agent.NewMemoryAgent(chatModel, memStore)
+		orchestrator.SetMemoryAgent(memAgent)
+		log.Println("记忆系统已启用")
+
+		// 启动 Dreaming Sweep 每日定时任务
+		sweep := memory.NewDreamingSweep(memStore, chatModel)
+		go runDreamingSweep(sweep)
+	}
+
 	// 初始化 Handler
 	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
+	resourceHandler := handler.NewResourceHandler(aiClient)
 
 	// 创建 Hertz 服务器
 	h := server.Default(server.WithHostPorts(":" + cfg.Port))
@@ -97,6 +114,34 @@ func main() {
 		convHandler.Delete(ctx, c)
 	})
 
+	// 资料上传路由
+	h.POST("/api/resources/upload", func(ctx context.Context, c *app.RequestContext) {
+		resourceHandler.Upload(ctx, c)
+	})
+
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)
 	h.Spin()
+}
+
+// runDreamingSweep 每日凌晨 3 点执行 Dreaming Sweep
+func runDreamingSweep(sweep *memory.DreamingSweep) {
+	for {
+		now := time.Now()
+		// 计算下一个凌晨 3:00
+		next := time.Date(now.Year(), now.Month(), now.Day()+1, 3, 0, 0, 0, now.Location())
+		duration := next.Sub(now)
+
+		log.Printf("Dreaming Sweep 将在 %s 后执行（%s）", duration.Round(time.Minute), next.Format("2006-01-02 15:04"))
+		time.Sleep(duration)
+
+		// 整理昨天的日志
+		yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+		log.Printf("开始执行 Dreaming Sweep: %s", yesterday)
+
+		if err := sweep.Run(context.Background(), yesterday); err != nil {
+			log.Printf("Dreaming Sweep 失败: %v", err)
+		} else {
+			log.Printf("Dreaming Sweep 完成: %s", yesterday)
+		}
+	}
 }
