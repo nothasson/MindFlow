@@ -51,6 +51,9 @@ type Orchestrator struct {
 	tutor      *TutorAgent
 	diagnostic *DiagnosticAgent
 	memAgent   *MemoryAgent
+	quiz       *QuizAgent
+	review     *ReviewAgent
+	curriculum *CurriculumAgent
 }
 
 // NewOrchestrator 创建调度器
@@ -59,6 +62,9 @@ func NewOrchestrator(chatModel model.ChatModel, tutor *TutorAgent) *Orchestrator
 		chatModel:  chatModel,
 		tutor:      tutor,
 		diagnostic: NewDiagnosticAgent(chatModel),
+		quiz:       NewQuizAgent(chatModel),
+		review:     NewReviewAgent(chatModel),
+		curriculum: NewCurriculumAgent(chatModel),
 	}
 }
 
@@ -67,16 +73,36 @@ func (o *Orchestrator) SetMemoryAgent(memAgent *MemoryAgent) {
 	o.memAgent = memAgent
 }
 
-// Chat 调度并执行对话（非流式）
+// Chat 根据路由决策调度对话（非流式）
 func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (string, error) {
-	// 当前阶段直接路由到 tutor，后续加入路由逻辑
-	return o.tutor.Chat(ctx, messages)
+	decision, _ := o.Route(ctx, messages)
+
+	switch decision.Agent {
+	case AgentTypeQuiz:
+		return o.quiz.GenerateQuiz(ctx, messages)
+	case AgentTypeCurriculum:
+		return o.curriculum.Plan(ctx, messages)
+	case AgentTypeDiagnostic:
+		return o.diagnostic.Diagnose(ctx, messages)
+	default:
+		return o.tutor.Chat(ctx, messages)
+	}
 }
 
-// ChatStream 调度并执行流式对话
+// ChatStream 根据路由决策调度流式对话
 func (o *Orchestrator) ChatStream(ctx context.Context, messages []*schema.Message) (*schema.StreamReader[*schema.Message], error) {
-	// 当前阶段直接路由到 tutor，后续加入路由逻辑
-	return o.tutor.ChatStream(ctx, messages)
+	decision, _ := o.Route(ctx, messages)
+
+	switch decision.Agent {
+	case AgentTypeQuiz:
+		return o.quiz.GenerateQuizStream(ctx, messages)
+	case AgentTypeCurriculum:
+		return o.curriculum.PlanStream(ctx, messages)
+	case AgentTypeDiagnostic:
+		return o.diagnostic.DiagnoseStream(ctx, messages)
+	default:
+		return o.tutor.ChatStream(ctx, messages)
+	}
 }
 
 // Route 分析消息并返回路由决策（预留，当前不调用 LLM 路由）

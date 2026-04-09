@@ -101,6 +101,7 @@ MindFlow/
 
 | 日期 | 类型 | 说明 |
 |------|------|------|
+| 2026-04-09 | feat | P3 出题和复习：Quiz/Review/Curriculum Agent + Orchestrator 路由分发 |
 | 2026-04-09 | feat | P2 诊断和记忆：Diagnostic Agent + Memory Agent + SM-2 算法 + 知识图谱数据模型 |
 | 2026-04-09 | feat | P1 资料理解：Python AI 服务文档解析/Embedding/向量搜索 + 前端上传页面 |
 | 2026-04-09 | feat | 会话持久化（PostgreSQL）+ 增量安全渲染 + 侧栏展示真实会话列表 |
