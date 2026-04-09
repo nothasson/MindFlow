@@ -40,9 +40,10 @@ func main() {
 
 	// 初始化 Agent
 	tutor := agent.NewTutorAgent(chatModel)
+	orchestrator := agent.NewOrchestrator(chatModel, tutor)
 
 	// 初始化 Handler
-	chatHandler := handler.NewChatHandler(tutor, convRepo, msgRepo)
+	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
 
 	// 创建 Hertz 服务器

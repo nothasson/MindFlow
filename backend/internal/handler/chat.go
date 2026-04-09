@@ -46,14 +46,14 @@ type SSEData struct {
 
 // ChatHandler 对话 HTTP 处理器
 type ChatHandler struct {
-	tutor    *agent.TutorAgent
-	convRepo *repository.ConversationRepo
-	msgRepo  *repository.MessageRepo
+	orchestrator *agent.Orchestrator
+	convRepo     *repository.ConversationRepo
+	msgRepo      *repository.MessageRepo
 }
 
 // NewChatHandler 创建对话处理器
-func NewChatHandler(tutor *agent.TutorAgent, convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo) *ChatHandler {
-	return &ChatHandler{tutor: tutor, convRepo: convRepo, msgRepo: msgRepo}
+func NewChatHandler(orchestrator *agent.Orchestrator, convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo) *ChatHandler {
+	return &ChatHandler{orchestrator: orchestrator, convRepo: convRepo, msgRepo: msgRepo}
 }
 
 // Handle POST /api/chat
@@ -137,7 +137,7 @@ func (h *ChatHandler) ensureConversation(ctx context.Context, req ChatRequest) (
 
 // handleNonStream 非流式响应
 func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext, messages []*schema.Message, convID uuid.UUID) {
-	reply, err := h.tutor.Chat(ctx, messages)
+	reply, err := h.orchestrator.Chat(ctx, messages)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "AI 服务错误: " + err.Error()})
 		return
@@ -159,7 +159,7 @@ func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext
 
 // handleStream SSE 流式响应
 func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, messages []*schema.Message, convID uuid.UUID) {
-	reader, err := h.tutor.ChatStream(ctx, messages)
+	reader, err := h.orchestrator.ChatStream(ctx, messages)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "AI 服务错误: " + err.Error()})
 		return
