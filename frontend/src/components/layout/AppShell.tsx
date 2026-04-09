@@ -7,11 +7,11 @@ interface AppShellProps {
 
 export function AppShell({ sidebar, children }: AppShellProps) {
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-800 sm:px-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl gap-6">
-        <aside className="hidden w-80 shrink-0 lg:block">{sidebar}</aside>
-        <section className="flex min-w-0 flex-1 flex-col">{children}</section>
-      </div>
+    <main className="flex h-screen bg-[#FAF9F6] text-stone-800">
+      <aside className="hidden w-72 shrink-0 flex-col bg-[#2A2520] lg:flex">
+        {sidebar}
+      </aside>
+      <section className="flex min-w-0 flex-1 flex-col">{children}</section>
     </main>
   );
 }

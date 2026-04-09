@@ -18,23 +18,26 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   }, [messages, isLoading]);
 
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto rounded-3xl border border-slate-100 bg-slate-50/80 p-4">
-      {messages.map((message, index) => (
-        <MessageBubble
-          key={`${message.role}-${index}-${message.content}`}
-          message={message}
-        />
-      ))}
+    <div className="flex h-full flex-col overflow-y-auto">
+      <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8">
+        {messages.map((message, index) => (
+          <MessageBubble
+            key={`${message.role}-${index}-${message.content}`}
+            message={message}
+          />
+        ))}
 
-      {isLoading ? (
-        <div className="flex justify-start">
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-            思考中...
+        {isLoading ? (
+          <div className="flex gap-3">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#D4A574] text-xs font-semibold text-white">
+              M
+            </div>
+            <div className="pt-1 text-sm text-stone-500">思考中...</div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      <div ref={bottomRef} />
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

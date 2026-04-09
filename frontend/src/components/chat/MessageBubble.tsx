@@ -8,18 +8,21 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const isAssistant = message.role === "assistant";
 
   return (
-    <div className={`flex ${isAssistant ? "justify-start" : "justify-end"}`}>
+    <div className="flex gap-3">
       <div
-        className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-7 shadow-sm ${
-          isAssistant
-            ? "border border-slate-200 bg-white text-slate-800"
-            : "bg-blue-900 text-slate-100"
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${
+          isAssistant ? "bg-[#D4A574]" : "bg-stone-600"
         }`}
       >
-        <div className="mb-1 text-xs font-semibold opacity-75">
-          {isAssistant ? "MindFlow 导师" : "你"}
+        {isAssistant ? "M" : "U"}
+      </div>
+      <div className="min-w-0 flex-1 pt-0.5">
+        <div className="mb-1 text-xs font-medium text-stone-500">
+          {isAssistant ? "MindFlow" : "你"}
         </div>
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        <div className="text-sm leading-7 text-stone-800">
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        </div>
       </div>
     </div>
   );

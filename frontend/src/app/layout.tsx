@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "MindFlow",
-  description: "AI 原生自适应学习平台",
+  description: "AI 学习系统",
 };
 
 export default function RootLayout({
