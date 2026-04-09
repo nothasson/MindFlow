@@ -37,8 +37,11 @@ export function SidebarCollapsed({ onExpand }: SidebarCollapsedProps) {
       ))}
 
       <div className="mt-auto">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-400 text-[11px] font-semibold text-white">
-          U
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-300 text-stone-500" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21a8 8 0 0 0-16 0" />
+            <circle cx="12" cy="8" r="5" />
+          </svg>
         </div>
       </div>
     </div>
