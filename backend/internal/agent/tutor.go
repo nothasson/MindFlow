@@ -34,21 +34,36 @@ func NewTutorAgent(chatModel model.ChatModel) *TutorAgent {
 	}
 }
 
-// Chat 进行苏格拉底式对话
-// messages 是用户和 AI 的历史消息列表
+// Chat 进行苏格拉底式对话（非流式，保留兼容）
 func (t *TutorAgent) Chat(ctx context.Context, messages []*schema.Message) (string, error) {
-	// 组装完整消息：system prompt + 历史消息
-	fullMessages := make([]*schema.Message, 0, len(messages)+1)
-	fullMessages = append(fullMessages, schema.SystemMessage(t.systemPrompt))
-	fullMessages = append(fullMessages, messages...)
+	fullMessages := t.buildMessages(messages)
 
-	// 调用 LLM
 	resp, err := t.chatModel.Generate(ctx, fullMessages)
 	if err != nil {
 		return "", fmt.Errorf("LLM 生成失败: %w", err)
 	}
 
 	return resp.Content, nil
+}
+
+// ChatStream 流式对话，返回 StreamReader
+func (t *TutorAgent) ChatStream(ctx context.Context, messages []*schema.Message) (*schema.StreamReader[*schema.Message], error) {
+	fullMessages := t.buildMessages(messages)
+
+	reader, err := t.chatModel.Stream(ctx, fullMessages)
+	if err != nil {
+		return nil, fmt.Errorf("LLM 流式生成失败: %w", err)
+	}
+
+	return reader, nil
+}
+
+// buildMessages 组装 system prompt + 用户历史消息
+func (t *TutorAgent) buildMessages(messages []*schema.Message) []*schema.Message {
+	fullMessages := make([]*schema.Message, 0, len(messages)+1)
+	fullMessages = append(fullMessages, schema.SystemMessage(t.systemPrompt))
+	fullMessages = append(fullMessages, messages...)
+	return fullMessages
 }
 
 // GetSystemPrompt 返回系统提示词（用于测试验证）

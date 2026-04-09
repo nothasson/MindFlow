@@ -1,44 +1,65 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { sendMessage as requestAssistantMessage } from "@/lib/api";
+import { sendMessageStream } from "@/lib/api";
 import type { Message } from "@/lib/types";
 
-const initialMessages: Message[] = [];
-
 export function useChat() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const messagesRef = useRef<Message[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const sendMessage = useCallback(
     async (content: string) => {
       const trimmed = content.trim();
-      if (!trimmed || isLoading) {
-        return;
-      }
+      if (!trimmed || isLoading) return;
 
-      const userMessage: Message = {
-        role: "user",
-        content: trimmed,
-      };
+      const userMessage: Message = { role: "user", content: trimmed };
+      const nextMessages = [...messagesRef.current, userMessage];
 
-      const nextMessages = [...messages, userMessage];
-      setMessages(nextMessages);
+      const assistantPlaceholder: Message = { role: "assistant", content: "" };
+      setMessages([...nextMessages, assistantPlaceholder]);
       setError(null);
       setIsLoading(true);
 
-      try {
-        const assistantMessage = await requestAssistantMessage(nextMessages);
-        setMessages([...nextMessages, assistantMessage]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "发送消息失败");
-      } finally {
-        setIsLoading(false);
-      }
+      await sendMessageStream(
+        nextMessages,
+        (chunk) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last.role === "assistant") {
+              updated[updated.length - 1] = {
+                ...last,
+                content: last.content + chunk,
+              };
+            }
+            return updated;
+          });
+        },
+        () => {
+          setIsLoading(false);
+        },
+        (errMsg) => {
+          setError(errMsg);
+          setIsLoading(false);
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last.role === "assistant" && last.content === "") {
+              return prev.slice(0, -1);
+            }
+            return prev;
+          });
+        },
+      );
     },
-    [isLoading, messages],
+    [isLoading],
   );
 
   return {

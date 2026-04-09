@@ -66,7 +66,7 @@
 
 > 目标：完整的苏格拉底对话闭环，会话可持久化
 
-- [ ] **SSE 流式输出 + 打字机效果**
+- [x] **SSE 流式输出 + 打字机效果**
   - 后端 POST /api/chat 改为 SSE（Server-Sent Events）流式响应
   - Go 后端：逐 token 写入 `text/event-stream`，每个 chunk 一个 `data:` 事件
   - 前端 useChat：用 `EventSource` 或 `fetch` + `ReadableStream` 接收

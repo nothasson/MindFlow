@@ -2,6 +2,9 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -14,6 +17,7 @@ import (
 // ChatRequest 对话请求
 type ChatRequest struct {
 	Messages []MessageDTO `json:"messages"`
+	Stream   bool         `json:"stream,omitempty"`
 }
 
 // MessageDTO 消息传输对象
@@ -22,9 +26,16 @@ type MessageDTO struct {
 	Content string `json:"content"`
 }
 
-// ChatResponse 对话响应
+// ChatResponse 对话响应（非流式）
 type ChatResponse struct {
 	Message MessageDTO `json:"message"`
+}
+
+// SSEEvent SSE 事件数据
+type SSEEvent struct {
+	Content string `json:"content,omitempty"`
+	Done    bool   `json:"done,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // ChatHandler 对话 HTTP 处理器
@@ -59,7 +70,15 @@ func (h *ChatHandler) Handle(ctx context.Context, c *app.RequestContext) {
 		})
 	}
 
-	// 调用 Tutor Agent
+	if req.Stream {
+		h.handleStream(ctx, c, messages)
+	} else {
+		h.handleNonStream(ctx, c, messages)
+	}
+}
+
+// handleNonStream 非流式响应（保持兼容）
+func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext, messages []*schema.Message) {
 	reply, err := h.tutor.Chat(ctx, messages)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "AI 服务错误: " + err.Error()})
@@ -72,4 +91,44 @@ func (h *ChatHandler) Handle(ctx context.Context, c *app.RequestContext) {
 			Content: reply,
 		},
 	})
+}
+
+// handleStream SSE 流式响应
+func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, messages []*schema.Message) {
+	// 设置 SSE 响应头
+	c.SetStatusCode(http.StatusOK)
+	c.Response.Header.Set("Content-Type", "text/event-stream")
+	c.Response.Header.Set("Cache-Control", "no-cache")
+	c.Response.Header.Set("Connection", "keep-alive")
+	c.Response.Header.Set("X-Accel-Buffering", "no")
+
+	reader, err := h.tutor.ChatStream(ctx, messages)
+	if err != nil {
+		writeSSE(c, SSEEvent{Error: "AI 服务错误: " + err.Error(), Done: true})
+		return
+	}
+	defer reader.Close()
+
+	for {
+		chunk, err := reader.Recv()
+		if err != nil {
+			if err == io.EOF {
+				writeSSE(c, SSEEvent{Done: true})
+				return
+			}
+			writeSSE(c, SSEEvent{Error: "流式读取失败: " + err.Error(), Done: true})
+			return
+		}
+
+		if chunk.Content != "" {
+			writeSSE(c, SSEEvent{Content: chunk.Content})
+		}
+	}
+}
+
+// writeSSE 写入一条 SSE 事件并 flush
+func writeSSE(c *app.RequestContext, event SSEEvent) {
+	data, _ := json.Marshal(event)
+	c.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
+	c.Flush()
 }
