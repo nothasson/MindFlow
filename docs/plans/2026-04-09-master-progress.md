@@ -72,7 +72,7 @@
   - 前端 useChat：用 `EventSource` 或 `fetch` + `ReadableStream` 接收
   - MessageBubble：AI 回复逐字追加渲染，产生打字机效果
   - 完成后仍保留完整消息用于 Markdown 渲染
-- [ ] **会话持久化**
+- [x] **会话持久化**
   - PostgreSQL 建表：conversations、messages
   - Go 后端：GET /api/conversations、GET /api/conversations/:id
   - 前端侧栏接真实会话列表

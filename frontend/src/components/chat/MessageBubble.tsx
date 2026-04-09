@@ -1,15 +1,15 @@
 import type { Message } from "@/lib/types";
 
-import { MarkdownRenderer } from "./MarkdownRenderer";
+import { StreamingMarkdown } from "./StreamingMarkdown";
 
 interface MessageBubbleProps {
   message: Message;
+  isStreaming?: boolean;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, isStreaming = false }: MessageBubbleProps) {
   const isAssistant = message.role === "assistant";
 
-  // 流式占位：assistant 内容为空时不渲染，由 loading 指示器负责
   if (isAssistant && !message.content) {
     return null;
   }
@@ -25,7 +25,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       </div>
       <div className="min-w-0 flex-1 text-[15px] leading-7 text-stone-800">
         {isAssistant ? (
-          <MarkdownRenderer content={message.content} />
+          <StreamingMarkdown content={message.content} isStreaming={isStreaming} />
         ) : (
           <p className="whitespace-pre-wrap">{message.content}</p>
         )}

@@ -1,18 +1,103 @@
 "use client";
 
+import { useCallback, useEffect, useState, startTransition } from "react";
+
 import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageList } from "@/components/chat/MessageList";
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { useChat } from "@/hooks/useChat";
+import { getConversations, getConversation, deleteConversation } from "@/lib/api";
+import type { Conversation } from "@/lib/types";
 
 export default function Home() {
-  const { messages, isLoading, error, sendMessage } = useChat();
+  const {
+    messages,
+    isLoading,
+    isStreaming,
+    error,
+    conversationId,
+    sendMessage,
+    loadConversation,
+    newConversation,
+  } = useChat();
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+
+  const refreshConversations = useCallback(async () => {
+    try {
+      const list = await getConversations();
+      startTransition(() => {
+        setConversations(list);
+      });
+    } catch {
+      // 静默失败
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshConversations();
+  }, [refreshConversations]);
+
+  // 流式结束后刷新会话列表
+  useEffect(() => {
+    if (!isLoading && conversationId) {
+      refreshConversations();
+    }
+  }, [isLoading, conversationId, refreshConversations]);
+
+  const handleSelectConversation = useCallback(
+    async (id: string) => {
+      try {
+        const data = await getConversation(id);
+        loadConversation(
+          id,
+          data.messages.map((m: { role: string; content: string }) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          })),
+        );
+      } catch {
+        // 加载失败静默处理
+      }
+    },
+    [loadConversation],
+  );
+
+  const handleDeleteConversation = useCallback(
+    async (id: string) => {
+      try {
+        await deleteConversation(id);
+        if (conversationId === id) {
+          newConversation();
+        }
+        refreshConversations();
+      } catch {
+        // 删除失败静默处理
+      }
+    },
+    [conversationId, newConversation, refreshConversations],
+  );
+
+  const handleNewChat = useCallback(() => {
+    newConversation();
+  }, [newConversation]);
 
   const hasMessages = messages.length > 0;
 
   return (
-    <AppShell sidebar={(onCollapse) => <Sidebar messages={messages} onCollapse={onCollapse} />}>
+    <AppShell
+      sidebar={(onCollapse) => (
+        <Sidebar
+          conversations={conversations}
+          currentConversationId={conversationId}
+          onSelectConversation={handleSelectConversation}
+          onDeleteConversation={handleDeleteConversation}
+          onNewChat={handleNewChat}
+          onCollapse={onCollapse}
+        />
+      )}
+    >
       {!hasMessages ? (
         <div className="flex flex-1 flex-col items-center px-4 pt-[28vh]">
           <div className="mb-10 flex items-center gap-4">
@@ -37,7 +122,7 @@ export default function Home() {
       ) : (
         <>
           <div className="flex-1 overflow-hidden pt-16">
-            <MessageList messages={messages} isLoading={isLoading} />
+            <MessageList messages={messages} isLoading={isLoading} isStreaming={isStreaming} />
           </div>
 
           {error ? (

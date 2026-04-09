@@ -1,17 +1,22 @@
-import type { Message } from "@/lib/types";
+import type { Conversation } from "@/lib/types";
 
 interface SidebarProps {
-  messages?: Message[];
+  conversations?: Conversation[];
+  currentConversationId?: string | null;
+  onSelectConversation?: (id: string) => void;
+  onDeleteConversation?: (id: string) => void;
+  onNewChat?: () => void;
   onCollapse?: () => void;
 }
 
-export function Sidebar({ messages = [], onCollapse }: SidebarProps) {
-  const hasMessages = messages.length > 0;
-
-  const currentTitle = hasMessages
-    ? messages.find((m) => m.role === "user")?.content.slice(0, 30) || "当前会话"
-    : null;
-
+export function Sidebar({
+  conversations = [],
+  currentConversationId,
+  onSelectConversation,
+  onDeleteConversation,
+  onNewChat,
+  onCollapse,
+}: SidebarProps) {
   return (
     <div className="flex h-full flex-col bg-[#EEECE2] px-3 py-3 text-stone-700">
       <div className="mb-1 flex items-center justify-between px-2">
@@ -32,6 +37,7 @@ export function Sidebar({ messages = [], onCollapse }: SidebarProps) {
           ) : null}
           <button
             type="button"
+            onClick={onNewChat}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-500 transition hover:bg-stone-200/60 hover:text-stone-700"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -43,27 +49,58 @@ export function Sidebar({ messages = [], onCollapse }: SidebarProps) {
       </div>
 
       <div className="mt-2 space-y-0.5 px-1">
-        <SidebarItem label="新建对话" active={!hasMessages} />
-        <SidebarItem label="搜索" />
+        <button
+          type="button"
+          onClick={onNewChat}
+          className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+            !currentConversationId
+              ? "bg-stone-200/70 font-medium text-stone-800"
+              : "text-stone-600 hover:bg-stone-200/50 hover:text-stone-800"
+          }`}
+        >
+          新建对话
+        </button>
       </div>
 
-      <div className="mt-5 px-2">
+      <div className="mt-5 flex-1 overflow-y-auto px-2">
         <p className="mb-2 text-[11px] font-medium text-stone-400">最近对话</p>
-        {currentTitle ? (
+        {conversations.length > 0 ? (
           <div className="space-y-0.5">
-            <button
-              type="button"
-              className="w-full truncate rounded-lg bg-stone-200/70 px-3 py-2 text-left text-sm font-medium text-stone-800"
-            >
-              {currentTitle}
-            </button>
+            {conversations.map((conv) => (
+              <div key={conv.id} className="group flex items-center">
+                <button
+                  type="button"
+                  onClick={() => onSelectConversation?.(conv.id)}
+                  className={`flex-1 truncate rounded-lg px-3 py-2 text-left text-sm transition ${
+                    currentConversationId === conv.id
+                      ? "bg-stone-200/70 font-medium text-stone-800"
+                      : "text-stone-600 hover:bg-stone-200/50 hover:text-stone-800"
+                  }`}
+                >
+                  {conv.title || "未命名会话"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteConversation?.(conv.id);
+                  }}
+                  className="ml-1 hidden h-6 w-6 shrink-0 items-center justify-center rounded text-stone-400 transition hover:bg-stone-200 hover:text-stone-600 group-hover:flex"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            ))}
           </div>
         ) : (
           <p className="px-1 text-sm text-stone-400">暂无会话</p>
         )}
       </div>
 
-      <div className="mt-auto border-t border-stone-300/40 px-2 pt-3">
+      <div className="border-t border-stone-300/40 px-2 pt-3">
         <div className="flex h-9 items-center gap-2.5 rounded-lg px-1">
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-400 text-[11px] font-semibold text-white">
             U
@@ -72,20 +109,5 @@ export function Sidebar({ messages = [], onCollapse }: SidebarProps) {
         </div>
       </div>
     </div>
-  );
-}
-
-function SidebarItem({ label, active }: { label: string; active?: boolean }) {
-  return (
-    <button
-      type="button"
-      className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-        active
-          ? "bg-stone-200/70 font-medium text-stone-800"
-          : "text-stone-600 hover:bg-stone-200/50 hover:text-stone-800"
-      }`}
-    >
-      {label}
-    </button>
   );
 }

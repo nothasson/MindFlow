@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, Message, SSEEvent } from "@/lib/types";
+import type { ChatRequest, ChatResponse, Conversation, Message, SSEEvent } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -37,9 +37,11 @@ export async function sendMessage(messages: Message[]): Promise<Message> {
 /** 流式发送，通过回调逐 chunk 输出 */
 export async function sendMessageStream(
   messages: Message[],
+  conversationId: string | null,
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (error: string) => void,
+  onConversationId?: (id: string) => void,
 ): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => {
@@ -48,10 +50,15 @@ export async function sendMessageStream(
   }, 60000);
 
   try {
+    const body: ChatRequest = { messages, stream: true };
+    if (conversationId) {
+      body.conversation_id = conversationId;
+    }
+
     const response = await fetch(`${API_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, stream: true } satisfies ChatRequest),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
 
@@ -95,6 +102,9 @@ export async function sendMessageStream(
             reader.cancel();
             return;
           }
+          if (event.conversation_id && onConversationId) {
+            onConversationId(event.conversation_id);
+          }
           if (event.done) {
             onDone();
             return;
@@ -111,10 +121,31 @@ export async function sendMessageStream(
     onDone();
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      return; // 超时已在上面处理
+      return;
     }
     onError(err instanceof Error ? err.message : "发送消息失败");
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** 获取会话列表 */
+export async function getConversations(): Promise<Conversation[]> {
+  const response = await fetch(`${API_URL}/api/conversations`);
+  if (!response.ok) throw new Error("获取会话列表失败");
+  const data = (await response.json()) as { conversations: Conversation[] };
+  return data.conversations;
+}
+
+/** 获取会话详情（含消息） */
+export async function getConversation(id: string): Promise<{ conversation: Conversation; messages: Message[] }> {
+  const response = await fetch(`${API_URL}/api/conversations/${id}`);
+  if (!response.ok) throw new Error("获取会话详情失败");
+  return response.json();
+}
+
+/** 删除会话 */
+export async function deleteConversation(id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/conversations/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error("删除会话失败");
 }

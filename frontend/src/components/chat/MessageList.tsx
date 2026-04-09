@@ -8,16 +8,16 @@ import type { Message } from "@/lib/types";
 interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
+  isStreaming: boolean;
 }
 
-export function MessageList({ messages, isLoading }: MessageListProps) {
+export function MessageList({ messages, isLoading, isStreaming }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  // 流式模式下：最后一条 assistant 有内容了就不再显示"思考中"
   const lastMsg = messages[messages.length - 1];
   const showLoading =
     isLoading && !(lastMsg?.role === "assistant" && lastMsg.content.length > 0);
@@ -25,12 +25,18 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8">
-        {messages.map((message, index) => (
-          <MessageBubble
-            key={`${message.role}-${index}-${message.content}`}
-            message={message}
-          />
-        ))}
+        {messages.map((message, index) => {
+          const isLastAssistant =
+            index === messages.length - 1 && message.role === "assistant";
+
+          return (
+            <MessageBubble
+              key={`${message.role}-${index}-${message.content.slice(0, 20)}`}
+              message={message}
+              isStreaming={isLastAssistant && isStreaming}
+            />
+          );
+        })}
 
         {showLoading ? (
           <div className="flex gap-3">

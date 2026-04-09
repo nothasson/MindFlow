@@ -8,7 +8,9 @@ import type { Message } from "@/lib/types";
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const messagesRef = useRef<Message[]>([]);
 
   useEffect(() => {
@@ -27,9 +29,12 @@ export function useChat() {
       setMessages([...nextMessages, assistantPlaceholder]);
       setError(null);
       setIsLoading(true);
+      setIsStreaming(true);
 
       await sendMessageStream(
         nextMessages,
+        conversationId,
+        // onChunk
         (chunk) => {
           setMessages((prev) => {
             const updated = [...prev];
@@ -43,12 +48,16 @@ export function useChat() {
             return updated;
           });
         },
+        // onDone
         () => {
           setIsLoading(false);
+          setIsStreaming(false);
         },
+        // onError
         (errMsg) => {
           setError(errMsg);
           setIsLoading(false);
+          setIsStreaming(false);
           setMessages((prev) => {
             const last = prev[prev.length - 1];
             if (last.role === "assistant" && last.content === "") {
@@ -57,15 +66,35 @@ export function useChat() {
             return prev;
           });
         },
+        // onConversationId
+        (id) => {
+          setConversationId(id);
+        },
       );
     },
-    [isLoading],
+    [isLoading, conversationId],
   );
+
+  const loadConversation = useCallback((id: string, msgs: Message[]) => {
+    setConversationId(id);
+    setMessages(msgs);
+    setError(null);
+  }, []);
+
+  const newConversation = useCallback(() => {
+    setConversationId(null);
+    setMessages([]);
+    setError(null);
+  }, []);
 
   return {
     messages,
     isLoading,
+    isStreaming,
     error,
+    conversationId,
     sendMessage,
+    loadConversation,
+    newConversation,
   };
 }
