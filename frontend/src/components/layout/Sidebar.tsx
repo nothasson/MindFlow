@@ -1,4 +1,12 @@
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { Conversation } from "@/lib/types";
+
+const navItems = [
+  { href: "/knowledge", label: "知识图谱", icon: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" },
+  { href: "/dashboard", label: "学习仪表盘", icon: "M3 3v18h18M9 17V9m4 8V5m4 12v-4" },
+  { href: "/review", label: "复习计划", icon: "M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" },
+];
 
 interface SidebarProps {
   conversations?: Conversation[];
@@ -17,6 +25,8 @@ export function Sidebar({
   onNewChat,
   onCollapse,
 }: SidebarProps) {
+  const pathname = usePathname();
+
   return (
     <div className="flex h-full flex-col bg-[#EEECE2] px-3 py-3 text-stone-700">
       <div className="mb-1 flex items-center justify-between px-2">
@@ -98,6 +108,28 @@ export function Sidebar({
         ) : (
           <p className="px-1 text-sm text-stone-400">暂无会话</p>
         )}
+      </div>
+
+      <div className="border-t border-stone-300/40 px-2 pt-3">
+        <p className="mb-2 px-1 text-[11px] font-medium text-stone-400">工具</p>
+        <div className="space-y-0.5">
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+                pathname === item.href
+                  ? "bg-stone-200/70 font-medium text-stone-800"
+                  : "text-stone-600 hover:bg-stone-200/50 hover:text-stone-800"
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d={item.icon} />
+              </svg>
+              {item.label}
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="border-t border-stone-300/40 px-2 pt-3">

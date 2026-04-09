@@ -108,11 +108,11 @@ npx playwright test --ui           # 带 UI 的 E2E 测试
 
 ```bash
 cp .env.example .env               # 首次部署：复制环境变量模板
-docker-compose up -d               # 启动所有服务（首次会自动构建镜像）
-docker-compose down                # 停止所有服务
-docker-compose up -d --build       # 重新构建镜像并启动
-docker-compose logs -f backend     # 查看指定服务日志
-docker-compose restart backend     # 重启指定服务
+docker compose up -d               # 启动所有服务（首次会自动构建镜像）
+docker compose down                # 停止所有服务
+docker compose up -d --build       # 重新构建镜像并启动
+docker compose logs -f backend     # 查看指定服务日志
+docker compose restart backend     # 重启指定服务
 ```
 
 ## 开发原则
@@ -121,6 +121,7 @@ docker-compose restart backend     # 重启指定服务
 - **苏格拉底原则** — Tutor Agent 绝不直接给答案，所有教学回复必须是引导性提问或提示。测试必须验证这一不变性。
 - **记忆连续性** — 记忆系统必须维持跨 session 的状态。Dreaming Sweep 每日定时任务负责将短期记忆提炼为长期学习画像。
 - **AI Native，不是 Workflow** — 严禁用 `if/switch + 关键词匹配` 做 Agent 路由或决策。所有需要理解语义的判断（路由分发、意图识别、内容分类等）必须交给 LLM 决策。关键词匹配只能用于纯机械性操作（如命令解析），不能用于替代语义理解。这是 AI Native 产品和 workflow 工具的本质区别。
+- **搜索时带上年份 2026** — 在使用 WebSearch 查询技术文档、版本信息、API 参考时，搜索关键词中必须包含 `2026`，避免查到过时信息。当前年份的工具链版本都是最新的（如 Go 1.26、Node 20+），不要质疑版本是否存在。
 
 ## 规则
 
@@ -148,23 +149,23 @@ fix: 修复记忆系统跨 session 状态丢失问题
 
 本地开发时，`docker-compose.override.yml` 会自动将源码目录挂载到容器内，大多数改动通过 HMR / 热重载即时生效，无需重建镜像。
 
-**需要重建镜像（`docker-compose up -d --build <服务名>`）的情况：**
+**需要重建镜像（`docker compose up -d --build <服务名>`）的情况：**
 - 新增或删除 npm/pip/go 依赖（`package.json`、`requirements.txt`、`go.mod` 变化）
 - 修改 `Dockerfile` 本身
 - 修改 `docker-compose.yml` 或 `docker-compose.override.yml`
 
-**日常代码改动（新增/修改/删除源码文件）** 只需等 HMR 自动刷新，或执行 `docker-compose restart <服务名>`。
+**日常代码改动（新增/修改/删除源码文件）** 只需等 HMR 自动刷新，或执行 `docker compose restart <服务名>`。
 
 | 修改范围 | 操作 |
 |---------|------|
-| 源码文件（`.ts/.tsx/.go/.py`） | 无需操作，HMR 自动生效；异常时 `docker-compose restart <服务名>` |
-| `package.json` / `requirements.txt` / `go.mod` 依赖变化 | `docker-compose up -d --build <服务名>` |
-| `Dockerfile` / `docker-compose.yml` | `docker-compose down && docker-compose up -d --build` |
-| `proto/` 下 `.proto` 文件 | 先 `make proto`，再 `docker-compose restart backend ai-service` |
+| 源码文件（`.ts/.tsx/.go/.py`） | 无需操作，HMR 自动生效；异常时 `docker compose restart <服务名>` |
+| `package.json` / `requirements.txt` / `go.mod` 依赖变化 | `docker compose up -d --build <服务名>` |
+| `Dockerfile` / `docker-compose.yml` | `docker compose down && docker compose up -d --build` |
+| `proto/` 下 `.proto` 文件 | 先 `make proto`，再 `docker compose restart backend ai-service` |
 
 **部署模式**（别人 clone 后部署）使用：
 ```bash
-docker-compose -f docker-compose.yml up -d
+docker compose -f docker-compose.yml up -d
 ```
 此时不加载 override，完全走 Dockerfile 构建镜像，不依赖本地源码挂载。
 

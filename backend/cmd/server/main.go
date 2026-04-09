@@ -32,6 +32,12 @@ func main() {
 	defer db.Close()
 	log.Println("数据库连接成功")
 
+	// 自动执行数据库迁移
+	migrationsDir := cfg.MigrationsDir
+	if err := db.Migrate(ctx, migrationsDir); err != nil {
+		log.Fatalf("数据库迁移失败: %v", err)
+	}
+
 	// 初始化 Repository
 	convRepo := repository.NewConversationRepo(db)
 	msgRepo := repository.NewMessageRepo(db)
@@ -76,10 +82,14 @@ func main() {
 		go runDreamingSweep(ctx, sweep)
 	}
 
+	// 初始化 Repository（知识图谱）
+	knowledgeRepo := repository.NewKnowledgeRepo(db)
+
 	// 初始化 Handler
 	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
 	resourceHandler := handler.NewResourceHandler(aiClient)
+	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)
 
 	// 创建 Hertz 服务器
 	h := server.Default(server.WithHostPorts(":" + cfg.Port))
@@ -118,6 +128,11 @@ func main() {
 	// 资料上传路由
 	h.POST("/api/resources/upload", func(ctx context.Context, c *app.RequestContext) {
 		resourceHandler.Upload(ctx, c)
+	})
+
+	// 知识图谱路由
+	h.GET("/api/knowledge/graph", func(ctx context.Context, c *app.RequestContext) {
+		knowledgeHandler.Graph(ctx, c)
 	})
 
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)

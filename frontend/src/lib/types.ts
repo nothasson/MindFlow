@@ -29,3 +29,27 @@ export interface Conversation {
   created_at: string;
   updated_at: string;
 }
+
+export interface KnowledgeNode {
+  id: string;
+  concept: string;
+  confidence: number;
+  error_type?: string;
+  easiness_factor: number;
+  interval_days: number;
+  repetitions: number;
+  last_reviewed: string;
+  next_review: string;
+}
+
+export interface KnowledgeEdge {
+  id: string;
+  from: string;
+  relation_type: string;
+  to: string;
+}
+
+export interface KnowledgeGraph {
+  nodes: KnowledgeNode[];
+  edges: KnowledgeEdge[];
+}

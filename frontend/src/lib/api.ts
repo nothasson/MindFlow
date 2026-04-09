@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, Conversation, Message, SSEEvent } from "@/lib/types";
+import type { ChatRequest, ChatResponse, Conversation, KnowledgeGraph, Message, SSEEvent } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -148,4 +148,11 @@ export async function getConversation(id: string): Promise<{ conversation: Conve
 export async function deleteConversation(id: string): Promise<void> {
   const response = await fetch(`${API_URL}/api/conversations/${id}`, { method: "DELETE" });
   if (!response.ok) throw new Error("删除会话失败");
+}
+
+/** 获取知识图谱数据 */
+export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
+  const response = await fetch(`${API_URL}/api/knowledge/graph`);
+  if (!response.ok) throw new Error("获取知识图谱失败");
+  return response.json();
 }

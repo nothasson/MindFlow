@@ -20,8 +20,9 @@ type Config struct {
 	AIServiceAddr string
 
 	// 文件存储
-	MemoryDir string
-	UploadDir string
+	MemoryDir     string
+	UploadDir     string
+	MigrationsDir string
 }
 
 func Load() *Config {
@@ -36,6 +37,7 @@ func Load() *Config {
 		AIServiceAddr: getEnv("AI_SERVICE_ADDR", "localhost:8000"),
 		MemoryDir:     getEnv("MEMORY_DIR", "/data/memory"),
 		UploadDir:     getEnv("UPLOAD_DIR", "/data/uploads"),
+		MigrationsDir: getEnv("MIGRATIONS_DIR", "./migrations"),
 	}
 }
 

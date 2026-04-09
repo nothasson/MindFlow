@@ -29,7 +29,9 @@ FROM alpine:3.19 AS prod
 
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /mindflow-backend /mindflow-backend
+COPY --from=builder /app/migrations /app/migrations
 
 EXPOSE 8080
 
+ENV MIGRATIONS_DIR=/app/migrations
 CMD ["/mindflow-backend"]
