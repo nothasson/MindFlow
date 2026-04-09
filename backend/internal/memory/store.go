@@ -119,6 +119,16 @@ func (s *Store) Search(query string) ([]SearchResult, error) {
 	return results, nil
 }
 
+// SaveLearnings 保存精华总结到 learnings/YYYY-MM-DD.md
+func (s *Store) SaveLearnings(date string, content string) error {
+	dir := filepath.Join(s.baseDir, "learnings")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("创建 learnings 目录失败: %w", err)
+	}
+	path := filepath.Join(dir, date+".md")
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
 // SearchResult 搜索结果
 type SearchResult struct {
 	Source  string

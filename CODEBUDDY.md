@@ -206,6 +206,21 @@ docker-compose -f docker-compose.yml up -d
 | 2026-04-09 | feat | 项目初始化，搭建 Docker 全容器化开发环境 |
 ```
 
+### 6. 代码提交前必须 Review
+
+每轮代码修改完成后，必须运行 `/review`（隔离上下文子 agent）做代码审查。流程：
+
+1. 写完代码 + 跑通测试
+2. 运行 `/review`，等待 review 结果
+3. **严重** 问题必须立即修复，修复后再次 `/review` 直到通过
+4. **警告** 问题视情况修复或记录到 plan 的"已知待优化"列表中
+5. **建议** 类问题记录到 plan，后续统一优化
+6. Review 通过后再 `git commit && git push`
+
+### 7. 已知技术债务记录到 plan
+
+Review 中发现的非紧急问题，不在当前功能中修复，但必须记录到 `docs/plans/2026-04-09-master-progress.md` 的"已知待优化"章节，避免遗忘。
+
 ## 关键设计决策
 
 - **SM-2（SuperMemo）算法**用于间隔重复 — `internal/review/sm2.go`。评分 0-5 分；≤2 分重置复习间隔为 1 天。

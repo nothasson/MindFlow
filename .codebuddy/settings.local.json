@@ -1,12 +1,11 @@
 {
   "hooks": {
-    "PostToolUse": [
+    "Stop": [
       {
-        "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Run /review on the file that was just modified."
+            "prompt": "You just finished a round of code changes. Run /review to do an isolated code review of the recently modified files before moving on."
           }
         ]
       }

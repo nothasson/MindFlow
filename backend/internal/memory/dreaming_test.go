@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cloudwego/eino/components/model"
@@ -13,13 +14,11 @@ import (
 type dreamingMockChatModel struct{}
 
 func (m *dreamingMockChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
-	// 根据 system prompt 判断是更新长期记忆还是生成总结
-	if len(input) > 0 {
-		sysContent := input[0].Content
-		if len(sysContent) > 20 && sysContent[:20] == "你是 MindFlow 的记忆整理" {
-			return &schema.Message{
-				Role: schema.Assistant,
-				Content: `# MEMORY.md - 学习画像
+	// 用 strings.Contains 判断是记忆整理还是学习总结
+	if len(input) > 0 && strings.Contains(input[0].Content, "记忆整理") {
+		return &schema.Message{
+			Role: schema.Assistant,
+			Content: `# MEMORY.md - 学习画像
 
 ## 学习偏好
 - 偏好语言：中文
@@ -40,8 +39,7 @@ func (m *dreamingMockChatModel) Generate(ctx context.Context, input []*schema.Me
 
 ---
 *最后更新：2026-04-09*`,
-			}, nil
-		}
+		}, nil
 	}
 
 	// 学习总结
@@ -66,7 +64,6 @@ func TestDreamingSweep_Run(t *testing.T) {
 		t.Fatalf("创建 store 失败: %v", err)
 	}
 
-	// 写入一条每日日志
 	err = store.AppendDailyLog("2026-04-09", "学习了矩阵乘法，掌握得不错。特征值分解还是搞不懂。")
 	if err != nil {
 		t.Fatalf("写入日志失败: %v", err)
@@ -81,28 +78,32 @@ func TestDreamingSweep_Run(t *testing.T) {
 	}
 
 	// 验证 MEMORY.md 已更新
-	memory, err := store.GetLongTermMemory()
+	mem, err := store.GetLongTermMemory()
 	if err != nil {
 		t.Fatalf("读取长期记忆失败: %v", err)
 	}
-	if memory == "" {
+	if mem == "" {
 		t.Error("长期记忆不应为空")
 	}
-	if !contains(memory, "矩阵乘法") {
+	if !strings.Contains(mem, "矩阵乘法") {
 		t.Error("长期记忆应包含矩阵乘法")
 	}
-	if !contains(memory, "特征值分解") {
+	if !strings.Contains(mem, "特征值分解") {
 		t.Error("长期记忆应包含特征值分解")
 	}
 
-	// 验证 learnings 已生成
+	// 验证 learnings 已生成且内容正确
 	learningPath := filepath.Join(tmpDir, "learnings", "2026-04-09.md")
 	data, err := os.ReadFile(learningPath)
 	if err != nil {
 		t.Fatalf("读取学习总结失败: %v", err)
 	}
-	if len(data) == 0 {
-		t.Error("学习总结不应为空")
+	content := string(data)
+	if !strings.Contains(content, "2026-04-09 学习总结") {
+		t.Error("学习总结应包含日期标题")
+	}
+	if !strings.Contains(content, "矩阵乘法") {
+		t.Error("学习总结应包含矩阵乘法")
 	}
 }
 
@@ -116,28 +117,73 @@ func TestDreamingSweep_Run_NoLog(t *testing.T) {
 	mockModel := &dreamingMockChatModel{}
 	sweep := NewDreamingSweep(store, mockModel)
 
-	// 没有日志时应该直接返回 nil
 	err = sweep.Run(context.Background(), "2026-04-09")
 	if err != nil {
 		t.Fatalf("无日志时不应报错: %v", err)
 	}
 
-	// MEMORY.md 不应被创建
-	memory, _ := store.GetLongTermMemory()
-	if memory != "" {
+	mem, _ := store.GetLongTermMemory()
+	if mem != "" {
 		t.Error("无日志时不应生成长期记忆")
 	}
 }
 
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsSubstring(s, sub))
+func TestDreamingSweep_Run_InvalidDate(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+
+	mockModel := &dreamingMockChatModel{}
+	sweep := NewDreamingSweep(store, mockModel)
+
+	// 路径遍历攻击
+	err = sweep.Run(context.Background(), "../../etc/passwd")
+	if err == nil {
+		t.Error("非法日期应报错")
+	}
+
+	// 非法格式
+	err = sweep.Run(context.Background(), "not-a-date")
+	if err == nil {
+		t.Error("非法格式应报错")
+	}
 }
 
-func containsSubstring(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
+func TestDreamingSweep_Run_EmptyLLMResponse(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
 	}
-	return false
+
+	err = store.AppendDailyLog("2026-04-10", "今天学了点东西")
+	if err != nil {
+		t.Fatalf("写入日志失败: %v", err)
+	}
+
+	// 用返回空内容的 mock
+	mockModel := &emptyResponseMockChatModel{}
+	sweep := NewDreamingSweep(store, mockModel)
+
+	err = sweep.Run(context.Background(), "2026-04-10")
+	if err == nil {
+		t.Error("LLM 返回空内容时应报错，以保护现有记忆")
+	}
+}
+
+// emptyResponseMockChatModel LLM 返回空内容
+type emptyResponseMockChatModel struct{}
+
+func (m *emptyResponseMockChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	return &schema.Message{Role: schema.Assistant, Content: ""}, nil
+}
+
+func (m *emptyResponseMockChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	return nil, nil
+}
+
+func (m *emptyResponseMockChatModel) BindTools(tools []*schema.ToolInfo) error {
+	return nil
 }

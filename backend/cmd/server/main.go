@@ -21,7 +21,8 @@ import (
 
 func main() {
 	cfg := config.Load()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// 初始化数据库
 	db, err := repository.NewDB(ctx, cfg.PostgresDSN)
@@ -72,7 +73,7 @@ func main() {
 
 		// 启动 Dreaming Sweep 每日定时任务
 		sweep := memory.NewDreamingSweep(memStore, chatModel)
-		go runDreamingSweep(sweep)
+		go runDreamingSweep(ctx, sweep)
 	}
 
 	// 初始化 Handler
@@ -124,21 +125,32 @@ func main() {
 }
 
 // runDreamingSweep 每日凌晨 3 点执行 Dreaming Sweep
-func runDreamingSweep(sweep *memory.DreamingSweep) {
+func runDreamingSweep(ctx context.Context, sweep *memory.DreamingSweep) {
 	for {
 		now := time.Now()
-		// 计算下一个凌晨 3:00
-		next := time.Date(now.Year(), now.Month(), now.Day()+1, 3, 0, 0, 0, now.Location())
+		// 计算下一个凌晨 3:00（如果今天 3:00 还没过，就用今天的）
+		next := time.Date(now.Year(), now.Month(), now.Day(), 3, 0, 0, 0, now.Location())
+		if !next.After(now) {
+			next = next.AddDate(0, 0, 1)
+		}
 		duration := next.Sub(now)
 
 		log.Printf("Dreaming Sweep 将在 %s 后执行（%s）", duration.Round(time.Minute), next.Format("2006-01-02 15:04"))
-		time.Sleep(duration)
+
+		timer := time.NewTimer(duration)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			log.Println("Dreaming Sweep 已停止")
+			return
+		case <-timer.C:
+		}
 
 		// 整理昨天的日志
 		yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 		log.Printf("开始执行 Dreaming Sweep: %s", yesterday)
 
-		if err := sweep.Run(context.Background(), yesterday); err != nil {
+		if err := sweep.Run(ctx, yesterday); err != nil {
 			log.Printf("Dreaming Sweep 失败: %v", err)
 		} else {
 			log.Printf("Dreaming Sweep 完成: %s", yesterday)

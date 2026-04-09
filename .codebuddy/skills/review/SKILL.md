@@ -53,6 +53,19 @@ MindFlow 是三服务架构：
 5. **缺少测试** — 新增的核心逻辑是否有对应的 _test.go / .test.ts / test_*.py
 6. **性能** — 不必要的分配、N+1 查询、缺少超时/限制
 
+## 已知待优化项（Review 时跳过，不重复报告）
+
+以下问题已记录在 plan 中，Review 时无需再次标记：
+
+- `Store` 层 `WriteLongTermMemory` 非原子写入（应改为 write-temp + os.Rename）
+- `Store` 层 `GetDailyLog`/`AppendDailyLog` 自身未校验 date 参数（调用方有校验）
+- `Store` 文件读写无并发锁（Memory Agent 和 Dreaming Sweep 可能竞态）
+- LLM 调用缺少 `context.WithTimeout` 超时控制
+- CORS AllowOrigins 硬编码 localhost（部署前需参数化）
+- AI 微服务客户端 health check 失败后无重试机制
+- `runDreamingSweep` 时间源硬编码 `time.Now()`，不可测试（需注入 clock 接口）
+- 测试 Mock 依赖 prompt 文本关键词做分支（应改为更明确的标识）
+
 ## 输出格式
 
 按文件分组，每个问题标注严重级别：
