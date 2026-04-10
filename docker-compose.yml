@@ -55,6 +55,7 @@ services:
     volumes:
       - mindflow-memory:/data/memory
       - mindflow-uploads:/data/uploads
+      - ~/.codex:/root/.codex:ro
     environment:
       - BACKEND_PORT=8080
       - POSTGRES_DSN=postgres://${POSTGRES_USER:-mindflow}:${POSTGRES_PASSWORD:-mindflow_dev}@postgres:5432/${POSTGRES_DB:-mindflow}?sslmode=disable
@@ -67,6 +68,7 @@ services:
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      - CODEX_MODEL=${CODEX_MODEL:-gpt-5.4}
     depends_on:
       postgres:
         condition: service_healthy

@@ -24,6 +24,9 @@ type Config struct {
 	UploadDir     string
 	MigrationsDir string
 
+	// Codex (OAuth)
+	CodexModel string
+
 	// CORS
 	CORSOrigins string
 }
@@ -37,6 +40,7 @@ func Load() *Config {
 		PostgresDSN:   getEnv("POSTGRES_DSN", ""),
 		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
 		QdrantAddr:    getEnv("QDRANT_ADDR", "localhost:6334"),
+		CodexModel:    getEnv("CODEX_MODEL", "gpt-5.4"),
 		AIServiceAddr: getEnv("AI_SERVICE_ADDR", "localhost:8000"),
 		MemoryDir:     getEnv("MEMORY_DIR", "/data/memory"),
 		UploadDir:     getEnv("UPLOAD_DIR", "/data/uploads"),

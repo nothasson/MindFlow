@@ -44,11 +44,27 @@ func main() {
 	msgRepo := repository.NewMessageRepo(db)
 	resourceRepo := repository.NewResourceRepo(db)
 
-	// 初始化 LLM 客户端
-	chatModel, err := llm.NewChatModel(ctx, cfg)
+	// 初始化 LLM ModelSwitch（支持多 provider 热切换）
+	modelSwitch := llm.NewModelSwitch()
+
+	// 注册硅基流动（默认 provider）
+	siliconModel, err := llm.NewChatModel(ctx, cfg)
 	if err != nil {
-		log.Fatalf("初始化 LLM 客户端失败: %v", err)
+		log.Fatalf("初始化硅基流动 LLM 失败: %v", err)
 	}
+	modelSwitch.Register("siliconflow", "硅基流动", cfg.LLMModel, siliconModel)
+
+	// 注册 Codex（可选，检测 token 文件）
+	if llm.CodexIsAvailable() {
+		codexModel := llm.NewCodexProvider(cfg.CodexModel)
+		modelSwitch.Register("codex", "Codex", cfg.CodexModel, codexModel)
+		log.Printf("Codex Provider 已注册 (模型: %s)", cfg.CodexModel)
+	} else {
+		log.Println("Codex Provider 未注册（未找到 token 文件）")
+	}
+
+	// modelSwitch 实现了 model.ChatModel 接口，所有 Agent 透明使用
+	chatModel := modelSwitch
 
 	// 初始化 AI 微服务客户端
 	aiClient := service.NewAIClient("http://" + cfg.AIServiceAddr)
@@ -122,7 +138,7 @@ func main() {
 	}
 	h.Use(cors.New(cors.Config{
 		AllowOrigins:     corsOrigins,
-		AllowMethods:     []string{"GET", "POST", "DELETE", "OPTIONS"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
 	}))
@@ -130,6 +146,29 @@ func main() {
 	// 路由
 	h.GET("/health", func(ctx context.Context, c *app.RequestContext) {
 		c.JSON(200, utils.H{"status": "ok", "service": "mindflow-backend"})
+	})
+
+	// Provider 设置 API
+	h.GET("/api/settings/provider", func(ctx context.Context, c *app.RequestContext) {
+		c.JSON(200, utils.H{
+			"active":    modelSwitch.Active(),
+			"providers": modelSwitch.Providers(),
+		})
+	})
+	h.PUT("/api/settings/provider", func(ctx context.Context, c *app.RequestContext) {
+		var req struct {
+			Provider string `json:"provider"`
+		}
+		if err := c.BindJSON(&req); err != nil {
+			c.JSON(400, utils.H{"error": "请求格式错误"})
+			return
+		}
+		if err := modelSwitch.SetActive(req.Provider); err != nil {
+			c.JSON(400, utils.H{"error": err.Error()})
+			return
+		}
+		log.Printf("LLM Provider 切换为: %s", req.Provider)
+		c.JSON(200, utils.H{"active": req.Provider})
 	})
 
 	h.POST("/api/chat", func(ctx context.Context, c *app.RequestContext) {

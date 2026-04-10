@@ -319,7 +319,7 @@ erDiagram
 | 前端 | TypeScript, Next.js 16, React 19, Tailwind CSS 4 |
 | 后端 | Go 1.26, Eino（Agent 编排）, Hertz（HTTP/SSE）, pgx |
 | AI 微服务 | Python 3.11, FastAPI, PyMuPDF, Qdrant Client |
-| LLM | 硅基流动 SiliconFlow（GLM-5.1 / 可切换任意 OpenAI 兼容模型） |
+| LLM | 硅基流动 SiliconFlow / OpenAI Codex (GPT-5.4)，设置页热切换 |
 | 数据库 | PostgreSQL 16（8 张表）, Qdrant（向量）, Redis 7 |
 | 测试 | Go testing, Vitest |
 | 部署 | Docker Compose（6 服务编排） |
@@ -332,6 +332,7 @@ erDiagram
 
 - [Docker](https://www.docker.com/) 和 Docker Compose
 - LLM API Key（[硅基流动](https://siliconflow.cn/) 或其他 OpenAI 兼容服务）
+- （可选）OpenAI Codex CLI 已登录（`codex login`），用于 Codex Provider
 
 ### 一键部署
 
@@ -340,6 +341,8 @@ git clone https://github.com/nothasson/MindFlow.git
 cd MindFlow
 cp .env.example .env
 # 编辑 .env，填入 LLM_API_KEY
+
+# （可选）如果要用 Codex Provider，确保已运行 codex login
 
 docker compose up -d
 
@@ -410,7 +413,10 @@ MindFlow/
 │   │   ├── service/                  # AI 微服务客户端
 │   │   ├── model/                    # 数据模型
 │   │   ├── config/                   # 配置加载
-│   │   └── llm/                      # LLM 客户端（Eino ChatModel）
+│   │   └── llm/                      # LLM 客户端
+│   │       ├── client.go              # 硅基流动 OpenAI 兼容客户端
+│   │       ├── codex.go               # Codex OAuth Provider（ChatGPT Responses API）
+│   │       └── switch.go              # ModelSwitch 热切换代理
 │   └── migrations/                   # 6 个数据库迁移
 ├── ai-service/                       # Python AI 微服务
 │   ├── app/
@@ -426,7 +432,7 @@ MindFlow/
 │   └── tests/
 ├── frontend/                         # Next.js 前端
 │   └── src/
-│       ├── app/                      # 7 个页面
+│       ├── app/                      # 8 个页面（含设置页）
 │       ├── components/               # UI 组件
 │       ├── hooks/                    # useChat 等
 │       └── lib/                      # API 客户端、类型
@@ -448,6 +454,7 @@ MindFlow/
 | `/dashboard` | 学习仪表盘 | GET /api/dashboard/stats |
 | `/review` | 复习日历 | GET /api/review/due |
 | `/courses/[id]` | 课程详情 | GET /api/courses/:id |
+| `/settings` | 系统设置（LLM Provider 切换） | GET/PUT /api/settings/provider |
 
 ---
 
@@ -458,6 +465,7 @@ MindFlow/
 | `LLM_API_KEY` | LLM API Key | （必填） |
 | `LLM_BASE_URL` | LLM API 地址 | `https://api.siliconflow.cn/v1` |
 | `LLM_MODEL` | 模型名 | `Pro/zai-org/GLM-5.1` |
+| `CODEX_MODEL` | Codex 模型名 | `gpt-5.4` |
 | `POSTGRES_USER` | PostgreSQL 用户名 | `mindflow` |
 | `POSTGRES_PASSWORD` | PostgreSQL 密码 | `mindflow_dev` |
 | `POSTGRES_DB` | PostgreSQL 数据库名 | `mindflow` |
