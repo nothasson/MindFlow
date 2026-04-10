@@ -54,12 +54,11 @@ func main() {
 	}
 	modelSwitch.Register("siliconflow", "硅基流动", cfg.LLMModel, siliconModel)
 
-	// 注册 Codex（可选，检测 token 文件）— 可用时设为默认
+	// 注册 Codex（可选，检测 token 文件）— 仅注册，不切换默认
 	if llm.CodexIsAvailable() {
 		codexModel := llm.NewCodexProvider(cfg.CodexModel)
 		modelSwitch.Register("codex", "Codex", cfg.CodexModel, codexModel)
-		modelSwitch.SetActive("codex")
-		log.Printf("Codex Provider 已注册并设为默认 (模型: %s)", cfg.CodexModel)
+		log.Printf("Codex Provider 已注册 (模型: %s)，默认仍使用硅基流动", cfg.CodexModel)
 	} else {
 		log.Println("Codex Provider 未注册（未找到 token 文件），使用硅基流动")
 	}
