@@ -5,7 +5,27 @@
       "Bash(ls -la plan*)",
       "Bash(grep -E \"\\\\.\\(ts|tsx|js|jsx|json\\)$\")",
       "Bash(xargs cat:*)",
-      "Bash(grep -E \"\\\\.go$\")"
+      "Bash(grep -E \"\\\\.go$\")",
+      "Read(//tmp/**)",
+      "Bash(cp /tmp/mindflow_check.md /Users/hasson/Codes/MindFlow/STAGE_CHECK_2026-04-10.md)",
+      "Bash(cp /tmp/mindflow_summary_table.txt /Users/hasson/Codes/MindFlow/STAGE_SUMMARY_TABLE.txt)",
+      "Bash(ls -lh /Users/hasson/Codes/MindFlow/STAGE*.*)",
+      "Bash(docker compose:*)",
+      "Bash(go build:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(go test:*)",
+      "Bash(ls:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(rm -f /Users/hasson/Codes/MindFlow/.git/config.lock)",
+      "Bash(git worktree:*)",
+      "Read(//Users/hasson/.claude-internal/projects/-Users-hasson-Codes-MindFlow/e6fb4939-8df9-48e5-bf31-de0820408989/subagents/**)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c :*)",
+      "Bash(grep:*)"
     ]
   }
 }

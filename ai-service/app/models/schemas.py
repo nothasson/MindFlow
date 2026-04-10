@@ -76,3 +76,55 @@ class KnowledgePoint(BaseModel):
 
 class ExtractResponse(BaseModel):
     points: list[KnowledgePoint]
+
+
+# --- 知识点向量化相关 ---
+
+
+class KnowledgeEmbedRequest(BaseModel):
+    """知识点向量化写入请求"""
+    concept: str
+    description: str = ""
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class KnowledgeEmbedBatchRequest(BaseModel):
+    """批量知识点向量化写入请求"""
+    items: list[KnowledgeEmbedRequest]
+
+
+class KnowledgeEmbedResponse(BaseModel):
+    """知识点向量化写入响应"""
+    success: bool
+    count: int
+
+
+class KnowledgeSearchRequest(BaseModel):
+    """知识点语义搜索请求"""
+    query: str
+    top_k: int = 5
+
+
+class KnowledgeSearchResult(BaseModel):
+    """知识点搜索结果"""
+    concept: str
+    description: str = ""
+    score: float
+    metadata: dict = Field(default_factory=dict)
+
+
+class KnowledgeSearchResponse(BaseModel):
+    """知识点搜索响应"""
+    results: list[KnowledgeSearchResult]
+
+
+class KnowledgeConfusableRequest(BaseModel):
+    """易混淆概念查询请求"""
+    concept: str
+    threshold: float = 0.85
+
+
+class KnowledgeConfusableResponse(BaseModel):
+    """易混淆概念查询响应"""
+    concept: str
+    confusable: list[KnowledgeSearchResult]
