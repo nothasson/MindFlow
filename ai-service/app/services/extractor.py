@@ -1,32 +1,29 @@
 import json
+import logging
 import os
 import re
 from urllib import error, request
 
+logger = logging.getLogger(__name__)
+
 
 def extract_knowledge_points(text: str) -> list[dict]:
-    """从资料文本中提取知识点。
-
-    优先使用 OpenAI 兼容接口调用 LLM；若未配置密钥或调用失败，则回退到启发式提取。
-    """
+    """从资料文本中提取知识点（仅使用 LLM，不做启发式 fallback）。"""
     cleaned = text.strip()
     if not cleaned:
         return []
 
-    llm_points = _extract_with_llm(cleaned)
-    if llm_points:
-        return llm_points
-
-    return _extract_with_fallback(cleaned)
+    return _extract_with_llm(cleaned)
 
 
 def _extract_with_llm(text: str) -> list[dict]:
     api_key = os.getenv("LLM_API_KEY", "")
     if not api_key:
+        logger.warning("LLM_API_KEY 未配置，无法提取知识点")
         return []
 
     base_url = os.getenv("LLM_BASE_URL", "https://api.siliconflow.cn/v1").rstrip("/")
-    model = os.getenv("LLM_MODEL", "Pro/MiniMaxAI/MiniMax-M2.5")
+    model = os.getenv("LLM_MODEL", "Pro/zai-org/GLM-5.1")
     prompt = (
         "你是知识点提取助手。请从学习资料中提取 3-8 个核心知识点，"
         "返回 JSON 数组，每项包含 concept、description、prerequisites。"
@@ -55,13 +52,15 @@ def _extract_with_llm(text: str) -> list[dict]:
     try:
         with request.urlopen(req, timeout=60) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.error("LLM 知识点提取请求失败: %s", e)
         return []
 
     try:
         content = body["choices"][0]["message"]["content"]
         parsed = json.loads(_extract_json_array(content))
-    except (KeyError, IndexError, TypeError, json.JSONDecodeError):
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
+        logger.error("LLM 知识点提取响应解析失败: %s, content: %s", e, body)
         return []
 
     normalized = []
@@ -80,33 +79,6 @@ def _extract_with_llm(text: str) -> list[dict]:
             }
         )
     return normalized
-
-
-def _extract_with_fallback(text: str) -> list[dict]:
-    candidates = []
-    parts = re.split(r"[。！？\n]+", text)
-    for raw in parts:
-        sentence = raw.strip(" -:：、，,；;")
-        if len(sentence) < 4:
-            continue
-
-        concept = sentence
-        if "是" in sentence:
-            concept = sentence.split("是", 1)[0].strip()
-        elif "指" in sentence:
-            concept = sentence.split("指", 1)[0].strip()
-        elif len(sentence) > 18:
-            concept = sentence[:18].strip()
-
-        if 2 <= len(concept) <= 20 and concept not in candidates:
-            candidates.append(concept)
-        if len(candidates) >= 6:
-            break
-
-    return [
-        {"concept": concept, "description": f"资料涉及“{concept}”这一知识点。", "prerequisites": []}
-        for concept in candidates
-    ]
 
 
 def _extract_json_array(content: str) -> str:
