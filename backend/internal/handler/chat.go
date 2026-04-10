@@ -197,6 +197,18 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 					h.msgRepo.Create(context.Background(), convID, "assistant", fullContent.String())
 				}
 
+				// 记录学习日志到记忆系统
+				if len(messages) > 0 {
+					lastUserMsg := ""
+					for i := len(messages) - 1; i >= 0; i-- {
+						if messages[i].Role == "user" {
+							lastUserMsg = messages[i].Content
+							break
+						}
+					}
+					h.orchestrator.RecordMemory(lastUserMsg, fullContent.String())
+				}
+
 					data, _ := json.Marshal(SSEData{Done: true})
 					stream.Publish(&sse.Event{Data: data})
 					return

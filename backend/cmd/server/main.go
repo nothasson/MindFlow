@@ -100,7 +100,8 @@ func main() {
 	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)
 	courseHandler := handler.NewCourseHandler(courseRepo, resourceRepo, courseware)
-	dashboardHandler := handler.NewDashboardHandler(convRepo, msgRepo, resourceRepo, courseRepo)
+	dashboardHandler := handler.NewDashboardHandler(convRepo, msgRepo, resourceRepo, courseRepo, knowledgeRepo)
+	reviewHandler := handler.NewReviewHandler(knowledgeRepo)
 
 	// 创建 Hertz 服务器
 	h := server.Default(
@@ -188,6 +189,14 @@ func main() {
 	// 仪表盘路由
 	h.GET("/api/dashboard/stats", func(ctx context.Context, c *app.RequestContext) {
 		dashboardHandler.Stats(ctx, c)
+	})
+
+	// 复习计划路由
+	h.GET("/api/review/due", func(ctx context.Context, c *app.RequestContext) {
+		reviewHandler.Due(ctx, c)
+	})
+	h.GET("/api/review/upcoming", func(ctx context.Context, c *app.RequestContext) {
+		reviewHandler.Upcoming(ctx, c)
 	})
 
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)

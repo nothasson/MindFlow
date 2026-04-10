@@ -221,7 +221,15 @@ func (o *Orchestrator) GetAgent(agentType AgentType) interface{} {
 	case AgentTypeTutor:
 		return o.tutor
 	default:
-		// 其他 Agent 尚未实现，回退到 tutor
 		return o.tutor
 	}
+}
+
+// RecordMemory 记录一条学习日志（供 handler 流式结束后调用）
+func (o *Orchestrator) RecordMemory(userMsg, assistantReply string) {
+	if o.memAgent == nil || userMsg == "" {
+		return
+	}
+	entry := "**用户**: " + userMsg + "\n\n**AI**: " + assistantReply
+	o.memAgent.RecordLog(entry)
 }

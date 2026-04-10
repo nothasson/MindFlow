@@ -126,3 +126,87 @@ func (r *KnowledgeRepo) UpsertExtractedPoints(ctx context.Context, points []Extr
 	}
 	return nil
 }
+
+// ReviewItem 复习项
+type ReviewItem struct {
+	ID             string    `json:"id"`
+	Concept        string    `json:"concept"`
+	Confidence     float64   `json:"confidence"`
+	EasinessFactor float64   `json:"easiness_factor"`
+	IntervalDays   int       `json:"interval_days"`
+	Repetitions    int       `json:"repetitions"`
+	NextReview     time.Time `json:"next_review"`
+	LastReviewed   time.Time `json:"last_reviewed"`
+}
+
+// GetDueForReview 获取今日到期的复习项
+func (r *KnowledgeRepo) GetDueForReview(ctx context.Context) ([]ReviewItem, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, concept, confidence, easiness_factor, interval_days, repetitions, next_review, last_reviewed
+		 FROM knowledge_mastery WHERE next_review <= NOW() ORDER BY next_review ASC LIMIT 50`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ReviewItem
+	for rows.Next() {
+		var item ReviewItem
+		if err := rows.Scan(&item.ID, &item.Concept, &item.Confidence, &item.EasinessFactor,
+			&item.IntervalDays, &item.Repetitions, &item.NextReview, &item.LastReviewed); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// GetUpcomingReview 获取未来 N 天内到期的复习项
+func (r *KnowledgeRepo) GetUpcomingReview(ctx context.Context, days int) ([]ReviewItem, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, concept, confidence, easiness_factor, interval_days, repetitions, next_review, last_reviewed
+		 FROM knowledge_mastery WHERE next_review > NOW() AND next_review <= NOW() + make_interval(days => $1)
+		 ORDER BY next_review ASC LIMIT 50`,
+		days,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ReviewItem
+	for rows.Next() {
+		var item ReviewItem
+		if err := rows.Scan(&item.ID, &item.Concept, &item.Confidence, &item.EasinessFactor,
+			&item.IntervalDays, &item.Repetitions, &item.NextReview, &item.LastReviewed); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// GetWeakPoints 获取薄弱知识点（confidence < 0.5，按 confidence 升序）
+func (r *KnowledgeRepo) GetWeakPoints(ctx context.Context, limit int) ([]ReviewItem, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, concept, confidence, easiness_factor, interval_days, repetitions, next_review, last_reviewed
+		 FROM knowledge_mastery WHERE confidence < 0.5 ORDER BY confidence ASC LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ReviewItem
+	for rows.Next() {
+		var item ReviewItem
+		if err := rows.Scan(&item.ID, &item.Concept, &item.Confidence, &item.EasinessFactor,
+			&item.IntervalDays, &item.Repetitions, &item.NextReview, &item.LastReviewed); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}

@@ -13,19 +13,21 @@ import (
 
 // DashboardHandler 仪表盘 API 处理器
 type DashboardHandler struct {
-	convRepo     *repository.ConversationRepo
-	msgRepo      *repository.MessageRepo
-	resourceRepo *repository.ResourceRepo
-	courseRepo   *repository.CourseRepo
+	convRepo      *repository.ConversationRepo
+	msgRepo       *repository.MessageRepo
+	resourceRepo  *repository.ResourceRepo
+	courseRepo    *repository.CourseRepo
+	knowledgeRepo *repository.KnowledgeRepo
 }
 
 // NewDashboardHandler 创建仪表盘处理器
-func NewDashboardHandler(convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo, resourceRepo *repository.ResourceRepo, courseRepo *repository.CourseRepo) *DashboardHandler {
+func NewDashboardHandler(convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo, resourceRepo *repository.ResourceRepo, courseRepo *repository.CourseRepo, knowledgeRepo *repository.KnowledgeRepo) *DashboardHandler {
 	return &DashboardHandler{
-		convRepo:     convRepo,
-		msgRepo:      msgRepo,
-		resourceRepo: resourceRepo,
-		courseRepo:   courseRepo,
+		convRepo:      convRepo,
+		msgRepo:       msgRepo,
+		resourceRepo:  resourceRepo,
+		courseRepo:    courseRepo,
+		knowledgeRepo: knowledgeRepo,
 	}
 }
 
@@ -70,6 +72,33 @@ func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
+	// 薄弱点
+	var weakPoints []repository.ReviewItem
+	if h.knowledgeRepo != nil {
+		weakPoints, _ = h.knowledgeRepo.GetWeakPoints(ctx, 10)
+	}
+	if weakPoints == nil {
+		weakPoints = []repository.ReviewItem{}
+	}
+
+	// 学习趋势（最近 7 天每天的消息数）
+	type DayCount struct {
+		Date  string `json:"date"`
+		Count int    `json:"count"`
+	}
+	var trend []DayCount
+	for i := 6; i >= 0; i-- {
+		day := today.AddDate(0, 0, -i).Format("2006-01-02")
+		count := 0
+		for _, conv := range convs {
+			if conv.CreatedAt.Format("2006-01-02") == day {
+				msgs, _ := h.msgRepo.GetByConversationID(ctx, conv.ID)
+				count += len(msgs)
+			}
+		}
+		trend = append(trend, DayCount{Date: day, Count: count})
+	}
+
 	c.JSON(http.StatusOK, utils.H{
 		"total_conversations": totalConversations,
 		"total_messages":      totalMessages,
@@ -77,5 +106,7 @@ func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
 		"total_courses":       totalCourses,
 		"total_days":          totalDays,
 		"streak":              streak,
+		"weak_points":         weakPoints,
+		"trend":               trend,
 	})
 }
