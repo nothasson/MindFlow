@@ -129,6 +129,10 @@ func main() {
 	quizHandler := handler.NewQuizHandler(agent.NewQuizAgent(chatModel), agent.NewVariantQuizAgent(chatModel), knowledgeRepo, quizRepo)
 	wrongBookHandler := handler.NewWrongBookHandler(quizRepo)
 
+	// 初始化晨间简报 Handler
+	curriculumAgent := agent.NewCurriculumAgent(chatModel)
+	briefingHandler := handler.NewBriefingHandler(knowledgeRepo, quizRepo, convRepo, curriculumAgent)
+
 	// 创建 Hertz 服务器
 	h := server.Default(
 		server.WithHostPorts(":"+cfg.Port),
@@ -211,6 +215,12 @@ func main() {
 	h.DELETE("/api/knowledge/concept/:name", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.DeleteConcept(ctx, c)
 	})
+	h.GET("/api/knowledge/prerequisite-chain", func(ctx context.Context, c *app.RequestContext) {
+		knowledgeHandler.PrerequisiteChain(ctx, c)
+	})
+	h.GET("/api/knowledge/learning-path", func(ctx context.Context, c *app.RequestContext) {
+		knowledgeHandler.LearningPath(ctx, c)
+	})
 
 	// 记忆系统路由
 	if memHandler != nil {
@@ -259,6 +269,12 @@ func main() {
 	h.GET("/api/dashboard/stats", func(ctx context.Context, c *app.RequestContext) {
 		dashboardHandler.Stats(ctx, c)
 	})
+	h.GET("/api/dashboard/heatmap", func(ctx context.Context, c *app.RequestContext) {
+		dashboardHandler.Heatmap(ctx, c)
+	})
+	h.GET("/api/dashboard/mastery-distribution", func(ctx context.Context, c *app.RequestContext) {
+		dashboardHandler.MasteryDistribution(ctx, c)
+	})
 
 	// 复习计划路由
 	h.GET("/api/review/due", func(ctx context.Context, c *app.RequestContext) {
@@ -291,6 +307,11 @@ func main() {
 	})
 	h.DELETE("/api/wrongbook/:id", func(ctx context.Context, c *app.RequestContext) {
 		wrongBookHandler.Delete(ctx, c)
+	})
+
+	// 晨间简报路由
+	h.GET("/api/daily-briefing", func(ctx context.Context, c *app.RequestContext) {
+		briefingHandler.GetBriefing(ctx, c)
 	})
 
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)

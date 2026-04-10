@@ -7,13 +7,156 @@ from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
 
 
+def split_by_sections(text: str, max_chars: int = 4000) -> list[str]:
+    """按标题分割文本为多个块。
+
+    按 Markdown 标题（# ## ###）或中文章节标题（第X章/节/部分）分割，
+    每块 3000-5000 字符，不切断段落。
+    """
+    if not text.strip():
+        return []
+
+    # 按标题行分割：Markdown 标题或"第X章/节/部分"
+    section_pattern = re.compile(
+        r'^(?=#{1,3}\s|第[一二三四五六七八九十百千\d]+[章节部分])',
+        re.MULTILINE,
+    )
+
+    parts = section_pattern.split(text)
+    # 恢复标题行（split 会丢掉匹配位置前的内容）
+    # 用 finditer 找到所有分割位置
+    positions = [0] + [m.start() for m in section_pattern.finditer(text)]
+    sections = []
+    for i, pos in enumerate(positions):
+        end = positions[i + 1] if i + 1 < len(positions) else len(text)
+        section = text[pos:end].strip()
+        if section:
+            sections.append(section)
+
+    if not sections:
+        sections = [text.strip()]
+
+    # 合并过短的块，拆分过长的块
+    chunks = []
+    current = ""
+    for section in sections:
+        if len(current) + len(section) <= max_chars:
+            current = (current + "\n\n" + section).strip()
+        else:
+            if current:
+                chunks.append(current)
+            # 如果单个 section 就超过 max_chars，按段落拆分
+            if len(section) > max_chars:
+                paragraphs = section.split("\n\n")
+                sub_chunk = ""
+                for para in paragraphs:
+                    if len(sub_chunk) + len(para) <= max_chars:
+                        sub_chunk = (sub_chunk + "\n\n" + para).strip()
+                    else:
+                        if sub_chunk:
+                            chunks.append(sub_chunk)
+                        sub_chunk = para
+                if sub_chunk:
+                    current = sub_chunk
+                else:
+                    current = ""
+            else:
+                current = section
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+
+def merge_and_deduplicate(all_points: list[list[dict]]) -> list[dict]:
+    """合并多块提取结果并去重。
+
+    按 concept 名称去重：
+    - 同名概念保留更详细的 description（更长的）
+    - 合并 relations（去重）
+    - 合并 prerequisites（去重）
+    """
+    merged: dict[str, dict] = {}
+
+    for points in all_points:
+        for point in points:
+            concept = point.get("concept", "").strip()
+            if not concept:
+                continue
+
+            if concept not in merged:
+                merged[concept] = dict(point)
+            else:
+                existing = merged[concept]
+
+                # 保留更详细的 description
+                new_desc = point.get("description", "")
+                old_desc = existing.get("description", "")
+                if len(new_desc) > len(old_desc):
+                    existing["description"] = new_desc
+
+                # 保留更高的 importance
+                new_imp = point.get("importance", 0.5)
+                old_imp = existing.get("importance", 0.5)
+                if new_imp > old_imp:
+                    existing["importance"] = new_imp
+
+                # 合并 prerequisites 去重
+                old_prereqs = set(existing.get("prerequisites", []))
+                new_prereqs = point.get("prerequisites", [])
+                old_prereqs.update(new_prereqs)
+                existing["prerequisites"] = list(old_prereqs)
+
+                # 合并 relations 去重（按 target+type 去重）
+                old_rels = existing.get("relations", [])
+                rel_keys = {(r["target"], r["type"]) for r in old_rels}
+                for rel in point.get("relations", []):
+                    key = (rel.get("target", ""), rel.get("type", ""))
+                    if key not in rel_keys:
+                        old_rels.append(rel)
+                        rel_keys.add(key)
+                existing["relations"] = old_rels
+
+    return list(merged.values())
+
+
 def extract_knowledge_points(text: str, existing_concepts: list[str] | None = None) -> list[dict]:
-    """从资料文本中提取知识点（仅使用 LLM，不做启发式 fallback）。"""
+    """从资料文本中提取知识点（仅使用 LLM，不做启发式 fallback）。
+
+    短文本（<= 6000 字）直接整体提取；
+    长文本分块提取后合并去重。
+    """
     cleaned = text.strip()
     if not cleaned:
         return []
 
-    return _extract_with_llm(cleaned, existing_concepts or [])
+    concepts = existing_concepts or []
+
+    # 短文本直接整体提取
+    if len(cleaned) <= 6000:
+        return _extract_with_llm(cleaned, concepts)
+
+    # 长文本：分块 → 分别提取 → 合并去重
+    chunks = split_by_sections(cleaned, max_chars=4000)
+    if not chunks:
+        return []
+
+    all_points = []
+    for chunk in chunks:
+        points = _extract_with_llm(chunk, concepts)
+        if points:
+            all_points.append(points)
+            # 将已提取的概念加入去重列表，避免后续块重复提取
+            for p in points:
+                c = p.get("concept", "")
+                if c and c not in concepts:
+                    concepts.append(c)
+
+    if not all_points:
+        return []
+
+    return merge_and_deduplicate(all_points)
 
 
 def _build_prompt(existing_concepts: list[str]) -> str:

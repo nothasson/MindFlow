@@ -29,6 +29,7 @@ func NewQuizHandler(quiz *agent.QuizAgent, variantQuiz *agent.VariantQuizAgent, 
 }
 
 // Generate POST /api/quiz/generate — 给定概念出题
+// 优先查询学生掌握度，使用 Bloom 认知分类法出题；查不到则降级为普通出题
 func (h *QuizHandler) Generate(ctx context.Context, c *app.RequestContext) {
 	var req struct {
 		Concept string `json:"concept"`
@@ -42,6 +43,29 @@ func (h *QuizHandler) Generate(ctx context.Context, c *app.RequestContext) {
 	genCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	// 尝试查询 confidence，有则使用 Bloom 分层出题
+	if h.knowledgeRepo != nil {
+		confidence, err := h.knowledgeRepo.GetConceptConfidence(ctx, req.Concept)
+		if err == nil {
+			result, genErr := h.quiz.GenerateQuizWithBloom(genCtx, req.Concept, confidence)
+			if genErr != nil {
+				c.JSON(http.StatusInternalServerError, utils.H{"error": "出题失败: " + genErr.Error()})
+				return
+			}
+			bloomLevel, _ := agent.BloomLevel(confidence)
+			c.JSON(http.StatusOK, utils.H{
+				"concept":     req.Concept,
+				"questions":   result,
+				"bloom_level": bloomLevel,
+				"confidence":  confidence,
+			})
+			return
+		}
+		// 查不到 confidence，降级为普通出题
+		log.Printf("未找到概念 %q 的掌握度，降级为普通出题: %v", req.Concept, err)
+	}
+
+	// 降级：使用原有 GenerateQuiz
 	messages := []*schema.Message{
 		schema.UserMessage("请针对「" + req.Concept + "」这个概念出 3 道题"),
 	}

@@ -92,3 +92,37 @@ func (c *CurriculumAgent) PlanWithContext(ctx context.Context, messages []*schem
 	}
 	return resp.Content, nil
 }
+
+// BriefingSystemPrompt 晨间简报专用 Prompt
+const BriefingSystemPrompt = `你是 MindFlow 的学习规划专家。请根据提供的学习数据，生成今日学习建议。
+
+你必须严格按照以下 JSON 格式输出，不要输出任何其他内容（不要用 markdown 代码块包裹）：
+{
+  "greeting": "一句个性化的问候语，可以结合学习情况",
+  "review_items": [{"concept": "需要复习的概念", "reason": "为什么需要复习", "est_minutes": 5}],
+  "new_items": [{"concept": "建议新学的概念", "reason": "为什么建议学习", "est_minutes": 15}],
+  "quiz_suggestion": {"concept": "建议测验的概念", "reason": "为什么建议测验", "est_minutes": 10}
+}
+
+规则：
+1. review_items 基于到期复习项和薄弱知识点，最多 5 个
+2. new_items 基于学习进度推荐下一步内容，最多 3 个
+3. quiz_suggestion 选择最需要巩固的一个概念
+4. 如果某个类别没有数据，对应字段使用空数组或 null
+5. est_minutes 是预估学习时间（分钟）
+6. 使用中文`
+
+// GenerateBriefing 生成今日学习简报
+func (c *CurriculumAgent) GenerateBriefing(ctx context.Context, learningContext string) (string, error) {
+	messages := []*schema.Message{
+		schema.SystemMessage(WrapPromptWithDefense(BriefingSystemPrompt)),
+		schema.UserMessage("以下是我当前的学习数据，请生成今日学习建议：\n\n" + learningContext),
+	}
+
+	resp, err := c.chatModel.Generate(ctx, messages)
+	if err != nil {
+		return "", fmt.Errorf("生成晨间简报失败: %w", err)
+	}
+
+	return resp.Content, nil
+}

@@ -410,6 +410,18 @@ func (r *KnowledgeRepo) DeleteByConcept(ctx context.Context, concept string) err
 	return err
 }
 
+// GetConceptConfidence 查询指定概念的掌握度（confidence）
+func (r *KnowledgeRepo) GetConceptConfidence(ctx context.Context, concept string) (float64, error) {
+	var confidence float64
+	err := r.pool.QueryRow(ctx,
+		`SELECT confidence FROM knowledge_mastery WHERE concept = $1`, concept,
+	).Scan(&confidence)
+	if err != nil {
+		return 0, err
+	}
+	return confidence, nil
+}
+
 // UpdateErrorType 更新知识点的错误类型
 func (r *KnowledgeRepo) UpdateErrorType(ctx context.Context, concept string, errorType string) error {
 	_, err := r.pool.Exec(ctx,
@@ -417,4 +429,63 @@ func (r *KnowledgeRepo) UpdateErrorType(ctx context.Context, concept string, err
 		errorType, concept,
 	)
 	return err
+}
+
+// PrerequisiteChainNode 前置知识链中的节点，包含递归深度信息
+type PrerequisiteChainNode struct {
+	ID         string  `json:"id"`
+	Concept    string  `json:"concept"`
+	Confidence float64 `json:"confidence"`
+	ErrorType  *string `json:"error_type,omitempty"`
+	Depth      int     `json:"depth"`
+}
+
+// GetPrerequisiteChain 递归查找薄弱前置知识
+// 使用 PostgreSQL 递归 CTE，只返回 confidence < 0.5 的薄弱前置节点
+func (r *KnowledgeRepo) GetPrerequisiteChain(ctx context.Context, concept string, maxDepth int) ([]PrerequisiteChainNode, error) {
+	query := `
+		WITH RECURSIVE prereq_chain AS (
+			-- 基准：找到目标概念的直接前置知识
+			SELECT km.id, km.concept, km.confidence, km.error_type, 1 AS depth
+			FROM knowledge_relations kr
+			JOIN knowledge_mastery km ON km.concept = kr.to_concept
+			WHERE kr.from_concept = $1
+			  AND kr.relation_type = 'prerequisite'
+			  AND (kr.valid_to IS NULL OR kr.valid_to > NOW())
+
+			UNION
+
+			-- 递归：沿前置关系继续向上追踪
+			SELECT km.id, km.concept, km.confidence, km.error_type, pc.depth + 1
+			FROM prereq_chain pc
+			JOIN knowledge_relations kr ON kr.from_concept = pc.concept
+			JOIN knowledge_mastery km ON km.concept = kr.to_concept
+			WHERE kr.relation_type = 'prerequisite'
+			  AND (kr.valid_to IS NULL OR kr.valid_to > NOW())
+			  AND pc.depth < $2
+		)
+		SELECT DISTINCT ON (concept) id, concept, confidence, error_type, depth
+		FROM prereq_chain
+		WHERE confidence < 0.5
+		ORDER BY concept, depth ASC
+	`
+
+	rows, err := r.pool.Query(ctx, query, concept, maxDepth)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []PrerequisiteChainNode
+	for rows.Next() {
+		var n PrerequisiteChainNode
+		if err := rows.Scan(&n.ID, &n.Concept, &n.Confidence, &n.ErrorType, &n.Depth); err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return nodes, nil
 }

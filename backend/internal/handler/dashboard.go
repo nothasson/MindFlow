@@ -106,3 +106,71 @@ func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
 		"trend":               trend,
 	})
 }
+
+// Heatmap GET /api/dashboard/heatmap
+// 返回最近 365 天的学习活跃数据，用于渲染 GitHub 风格热力图
+func (h *DashboardHandler) Heatmap(ctx context.Context, c *app.RequestContext) {
+	// 复用 msgRepo.CountByDay 查询最近 365 天每日消息数
+	days, err := h.msgRepo.CountByDay(ctx, 365)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取热力图数据失败: " + err.Error()})
+		return
+	}
+
+	type HeatmapEntry struct {
+		Date  string `json:"date"`
+		Count int    `json:"count"`
+	}
+
+	var heatmap []HeatmapEntry
+	for _, d := range days {
+		heatmap = append(heatmap, HeatmapEntry{Date: d.Date, Count: d.Count})
+	}
+	if heatmap == nil {
+		heatmap = []HeatmapEntry{}
+	}
+
+	c.JSON(http.StatusOK, utils.H{"heatmap": heatmap})
+}
+
+// MasteryDistribution GET /api/dashboard/mastery-distribution
+// 返回知识点掌握度分布（已掌握/学习中/薄弱 三档）
+func (h *DashboardHandler) MasteryDistribution(ctx context.Context, c *app.RequestContext) {
+	if h.knowledgeRepo == nil {
+		c.JSON(http.StatusOK, utils.H{
+			"mastered": 0,
+			"learning": 0,
+			"weak":     0,
+			"total":    0,
+		})
+		return
+	}
+
+	nodes, err := h.knowledgeRepo.ListNodes(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取掌握度分布失败: " + err.Error()})
+		return
+	}
+
+	// 分类标准：mastered >= 0.8, learning [0.3, 0.8), weak < 0.3
+	mastered := 0
+	learning := 0
+	weak := 0
+	for _, n := range nodes {
+		switch {
+		case n.Confidence >= 0.8:
+			mastered++
+		case n.Confidence >= 0.3:
+			learning++
+		default:
+			weak++
+		}
+	}
+
+	c.JSON(http.StatusOK, utils.H{
+		"mastered": mastered,
+		"learning": learning,
+		"weak":     weak,
+		"total":    len(nodes),
+	})
+}

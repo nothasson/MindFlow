@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
 
@@ -88,22 +89,32 @@ export default function ReviewPage() {
               今日复习 {dueItems.length > 0 ? `(${dueItems.length})` : ""}
             </h2>
             {dueItems.length > 0 ? (
-              <div className="space-y-2">
-                {dueItems.map((item) => (
-                  <a
-                    key={item.id}
-                    href={`/?q=${encodeURIComponent("复习一下" + item.concept)}`}
-                    className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50 p-4 transition hover:bg-stone-100"
-                  >
-                    <div>
-                      <p className="font-medium text-stone-800">{item.concept}</p>
-                      <p className="text-xs text-stone-400">
-                        掌握度 {Math.round(item.confidence * 100)}% · 间隔 {item.interval_days} 天
-                      </p>
-                    </div>
-                    <span className="text-sm text-[#C67A4A]">开始复习 →</span>
-                  </a>
-                ))}
+              <div>
+                {/* 开始复习按钮 */}
+                <Link
+                  href="/review/session"
+                  className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#C67A4A] px-6 py-3 text-sm font-medium text-white transition hover:bg-[#B06A3A]"
+                >
+                  开始复习（{dueItems.length} 个知识点）
+                  <span aria-hidden="true">→</span>
+                </Link>
+                <div className="space-y-2">
+                  {dueItems.map((item) => (
+                    <a
+                      key={item.id}
+                      href={`/?q=${encodeURIComponent("复习一下" + item.concept)}`}
+                      className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50 p-4 transition hover:bg-stone-100"
+                    >
+                      <div>
+                        <p className="font-medium text-stone-800">{item.concept}</p>
+                        <p className="text-xs text-stone-400">
+                          掌握度 {Math.round(item.confidence * 100)}% · 间隔 {item.interval_days} 天
+                        </p>
+                      </div>
+                      <span className="text-sm text-[#C67A4A]">单独复习 →</span>
+                    </a>
+                  ))}
+                </div>
               </div>
             ) : (
               <p className="text-sm text-stone-400">暂无到期的复习项</p>

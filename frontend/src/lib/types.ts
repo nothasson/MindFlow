@@ -71,3 +71,17 @@ export interface ResourceUploadResult {
   knowledge_points: string[];
   warning?: string;
 }
+
+/** 晨间简报相关类型 */
+export interface BriefingItem {
+  concept: string;
+  reason: string;
+  est_minutes: number;
+}
+
+export interface DailyBriefing {
+  greeting: string;
+  review_items: BriefingItem[];
+  new_items: BriefingItem[];
+  quiz_suggestion?: BriefingItem | null;
+}

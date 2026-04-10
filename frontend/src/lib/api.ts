@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, Conversation, KnowledgeGraph, Message, ResourceUploadResult, SSEEvent } from "@/lib/types";
+import type { ChatRequest, ChatResponse, Conversation, DailyBriefing, KnowledgeGraph, Message, ResourceUploadResult, SSEEvent } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -229,6 +229,14 @@ export async function uploadResource(file: File): Promise<ResourceUploadResult> 
   }
 
   return response.json();
+}
+
+/** 获取今日学习简报 */
+export async function getDailyBriefing(): Promise<DailyBriefing> {
+  const response = await fetch(`${API_URL}/api/daily-briefing`);
+  if (!response.ok) throw new Error("获取学习简报失败");
+  const data = (await response.json()) as { briefing: DailyBriefing };
+  return data.briefing;
 }
 
 /** 导入网页链接并通过后端转发给 AI 服务 */
