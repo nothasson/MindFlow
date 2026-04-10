@@ -103,7 +103,10 @@ func main() {
 	dashboardHandler := handler.NewDashboardHandler(convRepo, msgRepo, resourceRepo, courseRepo)
 
 	// 创建 Hertz 服务器
-	h := server.Default(server.WithHostPorts(":" + cfg.Port))
+	h := server.Default(
+		server.WithHostPorts(":"+cfg.Port),
+		server.WithMaxRequestBodySize(100*1024*1024), // 100MB
+	)
 
 	// CORS 中间件（从配置读取允许的 origins）
 	corsOrigins := strings.Split(cfg.CORSOrigins, ",")
