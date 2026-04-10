@@ -12,6 +12,7 @@ vi.mock("@/hooks/useChat", () => ({
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
 describe("首页状态切分", () => {

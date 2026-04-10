@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -91,4 +92,45 @@ func (r *ConversationRepo) Delete(ctx context.Context, id uuid.UUID) error {
 		id,
 	)
 	return err
+}
+
+// Count 获取会话总数
+func (r *ConversationRepo) Count(ctx context.Context) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM conversations`).Scan(&count)
+	return count, err
+}
+
+// CountDistinctDays 获取有会话的不同日期数
+func (r *ConversationRepo) CountDistinctDays(ctx context.Context) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(DISTINCT DATE(created_at)) FROM conversations`).Scan(&count)
+	return count, err
+}
+
+// GetActiveDays 获取最近 N 天内有会话的日期列表
+func (r *ConversationRepo) GetActiveDays(ctx context.Context, days int) ([]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT DISTINCT DATE(created_at) as day FROM conversations
+		 WHERE created_at >= NOW() - make_interval(days => $1)
+		 ORDER BY day DESC`,
+		days,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []string
+	for rows.Next() {
+		var d interface{}
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		switch v := d.(type) {
+		case time.Time:
+			result = append(result, v.Format("2006-01-02"))
+		}
+	}
+	return result, nil
 }

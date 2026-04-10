@@ -34,34 +34,36 @@ func NewDashboardHandler(convRepo *repository.ConversationRepo, msgRepo *reposit
 // Stats GET /api/dashboard/stats
 func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
 	// 会话数
-	convs, _ := h.convRepo.List(ctx)
-	totalConversations := len(convs)
+	// 会话数（单条 SQL）
+	totalConversations, err := h.convRepo.Count(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "查询统计失败: " + err.Error()})
+		return
+	}
 
-	// 消息数（单条 SQL 聚合，避免 N+1）
+	// 消息数（单条 SQL）
 	totalMessages, _ := h.msgRepo.CountAll(ctx)
 
-	// 资料数
-	resources, _ := h.resourceRepo.List(ctx)
-	totalResources := len(resources)
+	// 资料数（单条 SQL）
+	totalResources, _ := h.resourceRepo.Count(ctx)
 
-	// 课程数
-	courses, _ := h.courseRepo.List(ctx)
-	totalCourses := len(courses)
+	// 课程数（单条 SQL）
+	totalCourses, _ := h.courseRepo.Count(ctx)
 
-	// 计算学习天数（有会话的不同日期数）
-	daySet := map[string]bool{}
-	for _, conv := range convs {
-		day := conv.CreatedAt.Format("2006-01-02")
-		daySet[day] = true
-	}
-	totalDays := len(daySet)
+	// 学习天数（SQL 聚合）
+	totalDays, _ := h.convRepo.CountDistinctDays(ctx)
 
-	// 连续学习天数（从今天往回数）
-	streak := 0
+	// 连续学习天数
 	today := time.Now()
+	activeDays, _ := h.convRepo.GetActiveDays(ctx, 365)
+	activeDaySet := map[string]bool{}
+	for _, d := range activeDays {
+		activeDaySet[d] = true
+	}
+	streak := 0
 	for i := 0; i < 365; i++ {
 		day := today.AddDate(0, 0, -i).Format("2006-01-02")
-		if daySet[day] {
+		if activeDaySet[day] {
 			streak++
 		} else if i > 0 {
 			break

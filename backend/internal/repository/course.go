@@ -91,6 +91,13 @@ func (r *CourseRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+// Count 获取课程总数
+func (r *CourseRepo) Count(ctx context.Context) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM courses`).Scan(&count)
+	return count, err
+}
+
 // CreateSection 创建章节
 func (r *CourseRepo) CreateSection(ctx context.Context, courseID uuid.UUID, title, summary, content string, orderIndex int, objectives, questions string) (*model.CourseSection, error) {
 	var section model.CourseSection

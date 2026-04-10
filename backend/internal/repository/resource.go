@@ -105,3 +105,10 @@ func (r *ResourceRepo) List(ctx context.Context) ([]model.Resource, error) {
 	}
 	return resources, nil
 }
+
+// Count 获取资料总数
+func (r *ResourceRepo) Count(ctx context.Context) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM resources`).Scan(&count)
+	return count, err
+}
