@@ -132,6 +132,13 @@
 
 > 目标：产品化和可扩展性
 
+- [ ] **记忆页**（/memory）
+  - 学习画像概览（从 MEMORY.md 解析）
+  - 每日学习日志时间线（memory/YYYY-MM-DD.md）
+  - 精华总结（learnings/）
+  - 薄弱点追踪详情
+  - 记忆搜索
+  - 后端 API：GET /api/memory/profile、/timeline、/search、/weakpoints
 - [ ] 用户系统（注册登录）
 - [ ] 多用户数据隔离
 - [ ] LLM 评估体系（对话质量、诊断准确率）

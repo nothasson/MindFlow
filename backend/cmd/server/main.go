@@ -85,12 +85,17 @@ func main() {
 
 	// 初始化 Repository（知识图谱）
 	knowledgeRepo := repository.NewKnowledgeRepo(db)
+	courseRepo := repository.NewCourseRepo(db)
+
+	// 初始化课程生成 Agent
+	courseware := agent.NewCoursewareAgent(chatModel)
 
 	// 初始化 Handler
 	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
 	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)
+	courseHandler := handler.NewCourseHandler(courseRepo, resourceRepo, courseware)
 
 	// 创建 Hertz 服务器
 	h := server.Default(server.WithHostPorts(":" + cfg.Port))
@@ -142,6 +147,20 @@ func main() {
 	// 开发测试：回声接口，逐字流式返回用户内容，用于测试 Markdown/Mermaid 渲染和打字机效果
 	h.POST("/api/echo", func(ctx context.Context, c *app.RequestContext) {
 		handler.HandleEcho(ctx, c)
+	})
+
+	// 课程管理路由
+	h.POST("/api/resources/:id/generate-course", func(ctx context.Context, c *app.RequestContext) {
+		courseHandler.GenerateFromResource(ctx, c)
+	})
+	h.GET("/api/courses", func(ctx context.Context, c *app.RequestContext) {
+		courseHandler.List(ctx, c)
+	})
+	h.GET("/api/courses/:id", func(ctx context.Context, c *app.RequestContext) {
+		courseHandler.GetByID(ctx, c)
+	})
+	h.DELETE("/api/courses/:id", func(ctx context.Context, c *app.RequestContext) {
+		courseHandler.Delete(ctx, c)
 	})
 
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)

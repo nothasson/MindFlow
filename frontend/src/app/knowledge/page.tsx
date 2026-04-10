@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/immutability, @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";

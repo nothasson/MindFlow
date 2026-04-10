@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, startTransition, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useState, startTransition, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AppShell } from "@/components/layout/AppShell";
@@ -13,6 +13,14 @@ interface MainShellProps {
 }
 
 export function MainShell({ children }: MainShellProps) {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#EEECE2] text-stone-400">加载中...</div>}>
+      <MainShellInner>{children}</MainShellInner>
+    </Suspense>
+  );
+}
+
+function MainShellInner({ children }: MainShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

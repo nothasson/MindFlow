@@ -64,3 +64,44 @@ func (r *ResourceRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status st
 	`, status, chunkCount, id)
 	return err
 }
+
+// GetByID 按 ID 获取资料
+func (r *ResourceRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Resource, error) {
+	var res model.Resource
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, created_at, updated_at
+		FROM resources WHERE id = $1
+	`, id).Scan(
+		&res.ID, &res.SourceType, &res.Title, &res.OriginalFilename, &res.SourceURL,
+		&res.ContentText, &res.Pages, &res.ChunkCount, &res.Status, &res.CreatedAt, &res.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// List 获取资料列表
+func (r *ResourceRepo) List(ctx context.Context) ([]model.Resource, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, created_at, updated_at
+		FROM resources ORDER BY created_at DESC LIMIT 50
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resources []model.Resource
+	for rows.Next() {
+		var res model.Resource
+		if err := rows.Scan(
+			&res.ID, &res.SourceType, &res.Title, &res.OriginalFilename, &res.SourceURL,
+			&res.ContentText, &res.Pages, &res.ChunkCount, &res.Status, &res.CreatedAt, &res.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		resources = append(resources, res)
+	}
+	return resources, nil
+}
