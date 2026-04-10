@@ -375,22 +375,36 @@ export default function QuizPage() {
                     掌握度 {Math.round((weakPoints.find((w) => w.concept === concept)?.confidence ?? 0) * 100)}%，需要巩固
                   </p>
                 )}
-                <div className="flex gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <button
                     type="button"
                     onClick={generateQuiz}
                     disabled={loading}
-                    className="rounded-lg bg-[#C67A4A] px-6 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a] disabled:bg-stone-400"
+                    className="rounded-xl border-2 border-[#C67A4A] bg-[#C67A4A] p-3 text-center text-white transition hover:bg-[#b06a3a] disabled:bg-stone-400 disabled:border-stone-400"
                   >
-                    {loading ? "出题中..." : "开始测验"}
+                    <p className="text-lg">📝</p>
+                    <p className="text-sm font-medium">{loading ? "出题中..." : "题目测验"}</p>
+                    <p className="mt-0.5 text-[11px] opacity-80">AI 出题 + 评分解析</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAnkiMode(true); generateQuiz(); }}
+                    disabled={loading}
+                    className="rounded-xl border-2 border-stone-300 bg-white p-3 text-center text-stone-700 transition hover:border-stone-400 hover:bg-stone-50 disabled:opacity-50"
+                  >
+                    <p className="text-lg">🃏</p>
+                    <p className="text-sm font-medium">Anki 卡片</p>
+                    <p className="mt-0.5 text-[11px] text-stone-400">翻卡自评 + FSRS</p>
                   </button>
                   <button
                     type="button"
                     onClick={startConversation}
                     disabled={convLoading || !concept}
-                    className="rounded-lg border-2 border-[#C67A4A] px-6 py-2 text-sm font-medium text-[#C67A4A] transition hover:bg-[#C67A4A]/5 disabled:border-stone-300 disabled:text-stone-400"
+                    className="rounded-xl border-2 border-stone-300 bg-white p-3 text-center text-stone-700 transition hover:border-stone-400 hover:bg-stone-50 disabled:opacity-50"
                   >
-                    {convLoading ? "启动中..." : "对话考察"}
+                    <p className="text-lg">💬</p>
+                    <p className="text-sm font-medium">{convLoading ? "启动中..." : "对话考察"}</p>
+                    <p className="mt-0.5 text-[11px] text-stone-400">多轮追问 + 综合评价</p>
                   </button>
                 </div>
               </div>
@@ -457,6 +471,84 @@ export default function QuizPage() {
                   返回知识图谱
                 </Link>
               </div>
+            </div>
+          ) : ankiMode && questions.length > 0 ? (
+            /* Anki 卡片模式 */
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-stone-500">
+                  Anki 卡片：{concept}（{ankiIndex + 1} / {questions.length}）
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setAnkiMode(false); setQuestions([]); setAnkiIndex(0); setAnkiFlipped(false); setAnkiScores([]); }}
+                  className="rounded-lg border border-stone-200 px-3 py-1 text-sm text-stone-600 transition hover:bg-stone-100"
+                >
+                  退出
+                </button>
+              </div>
+
+              {/* 卡片 */}
+              <div
+                className="cursor-pointer rounded-2xl border border-stone-200 bg-white p-8 text-center transition hover:shadow-md"
+                onClick={() => setAnkiFlipped(!ankiFlipped)}
+              >
+                {!ankiFlipped ? (
+                  <div>
+                    <p className="mb-4 text-xs text-stone-400">点击翻转查看参考</p>
+                    <div className="text-left">
+                      <MarkdownRenderer content={questions[ankiIndex] ?? ""} />
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="mb-4 text-xs text-[#6b8e6b]">参考思路已展示，请自评掌握程度</p>
+                    <div className="text-left">
+                      <MarkdownRenderer content={questions[ankiIndex] ?? ""} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* FSRS 四按钮评分 */}
+              {ankiFlipped && (
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { rating: 1, label: "重来", desc: "完全不会", color: "bg-red-500 hover:bg-red-600" },
+                    { rating: 2, label: "困难", desc: "勉强想起", color: "bg-orange-500 hover:bg-orange-600" },
+                    { rating: 3, label: "良好", desc: "正常回忆", color: "bg-green-600 hover:bg-green-700" },
+                    { rating: 4, label: "轻松", desc: "非常简单", color: "bg-blue-500 hover:bg-blue-600" },
+                  ].map((btn) => (
+                    <button
+                      key={btn.rating}
+                      type="button"
+                      onClick={async () => {
+                        // 调用 Anki 评分 API
+                        try {
+                          await fetch(`${API_URL}/api/quiz/anki-rate`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ concept, rating: btn.rating }),
+                          });
+                        } catch { /* 静默 */ }
+                        setAnkiScores((prev) => [...prev, btn.rating]);
+                        // 下一张卡
+                        if (ankiIndex + 1 < questions.length) {
+                          setAnkiIndex((i) => i + 1);
+                          setAnkiFlipped(false);
+                        } else {
+                          setFinished(true);
+                          setAnkiMode(false);
+                        }
+                      }}
+                      className={`rounded-xl ${btn.color} p-3 text-white transition`}
+                    >
+                      <p className="text-sm font-medium">{btn.label}</p>
+                      <p className="text-[11px] opacity-80">{btn.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             /* 答题中 */
