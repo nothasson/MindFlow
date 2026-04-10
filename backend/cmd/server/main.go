@@ -111,7 +111,7 @@ func main() {
 	courseware := agent.NewCoursewareAgent(chatModel)
 
 	// 初始化 Handler
-	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo, knowledgeRepo)
+	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo, knowledgeRepo, aiClient)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
 	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)

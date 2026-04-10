@@ -17,6 +17,7 @@ import (
 
 	"github.com/nothasson/MindFlow/backend/internal/agent"
 	"github.com/nothasson/MindFlow/backend/internal/repository"
+	"github.com/nothasson/MindFlow/backend/internal/service"
 )
 
 // ChatRequest 对话请求
@@ -49,17 +50,23 @@ type SSEData struct {
 	Error          string `json:"error,omitempty"`
 }
 
+// chatAIClient 抽象 AI 微服务能力，用于对话后提取知识点。
+type chatAIClient interface {
+	ExtractKnowledgePoints(text string) (*service.ExtractResponse, error)
+}
+
 // ChatHandler 对话 HTTP 处理器
 type ChatHandler struct {
 	orchestrator  *agent.Orchestrator
 	convRepo      *repository.ConversationRepo
 	msgRepo       *repository.MessageRepo
 	knowledgeRepo *repository.KnowledgeRepo
+	aiClient      chatAIClient
 }
 
 // NewChatHandler 创建对话处理器
-func NewChatHandler(orchestrator *agent.Orchestrator, convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo, knowledgeRepo *repository.KnowledgeRepo) *ChatHandler {
-	return &ChatHandler{orchestrator: orchestrator, convRepo: convRepo, msgRepo: msgRepo, knowledgeRepo: knowledgeRepo}
+func NewChatHandler(orchestrator *agent.Orchestrator, convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo, knowledgeRepo *repository.KnowledgeRepo, aiClient chatAIClient) *ChatHandler {
+	return &ChatHandler{orchestrator: orchestrator, convRepo: convRepo, msgRepo: msgRepo, knowledgeRepo: knowledgeRepo, aiClient: aiClient}
 }
 
 // Handle POST /api/chat
@@ -162,6 +169,16 @@ func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext
 		}
 	}
 
+	// 异步从对话内容中提取知识点写入知识图谱
+	lastUserMsg := ""
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastUserMsg = messages[i].Content
+			break
+		}
+	}
+	go h.extractAndSaveKnowledge(lastUserMsg, reply)
+
 	c.JSON(http.StatusOK, ChatResponse{
 		ConversationID: convID.String(),
 		Message: MessageDTO{
@@ -220,6 +237,9 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 						h.orchestrator.RecordMemory(lastUserMsg, fullContent.String())
 					}
 
+					// 异步从对话内容中提取知识点写入知识图谱
+					go h.extractAndSaveKnowledge(lastUserMsg, fullContent.String())
+
 					data, _ := json.Marshal(SSEData{Done: true})
 					stream.Publish(&sse.Event{Data: data})
 					return
@@ -239,4 +259,53 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 	}()
 
 	<-done
+}
+
+// extractAndSaveKnowledge 异步从对话内容中提取知识点并写入知识图谱。
+// 在后台 goroutine 中执行，不阻塞响应。
+func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string) {
+	if h.aiClient == nil || h.knowledgeRepo == nil {
+		return
+	}
+
+	// 合并用户问题和 AI 回复作为提取上下文
+	text := userMsg + "\n\n" + assistantMsg
+	if len([]rune(text)) < 20 {
+		return // 内容太短，不提取
+	}
+
+	extractResult, err := h.aiClient.ExtractKnowledgePoints(text)
+	if err != nil {
+		log.Printf("对话知识点提取失败: %v", err)
+		return
+	}
+
+	points := make([]repository.ExtractedKnowledgePoint, 0, len(extractResult.Points))
+	for _, point := range extractResult.Points {
+		if point.Concept == "" {
+			continue
+		}
+		points = append(points, repository.ExtractedKnowledgePoint{
+			Concept:       point.Concept,
+			Description:   point.Description,
+			Prerequisites: point.Prerequisites,
+		})
+	}
+
+	if len(points) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := h.knowledgeRepo.UpsertExtractedPoints(ctx, points); err != nil {
+		log.Printf("对话知识点写入知识图谱失败: %v", err)
+	} else {
+		names := make([]string, len(points))
+		for i, p := range points {
+			names[i] = p.Concept
+		}
+		log.Printf("对话知识点已写入知识图谱: %v", names)
+	}
 }
