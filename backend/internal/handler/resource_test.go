@@ -79,6 +79,10 @@ func (s *stubResourceStore) UpdateStatus(ctx context.Context, id uuid.UUID, stat
 	return nil
 }
 
+func (s *stubResourceStore) UpdateOverview(ctx context.Context, id uuid.UUID, summary string, questions []string) error {
+	return nil
+}
+
 type stubKnowledgeWriter struct {
 	points []repository.ExtractedKnowledgePoint
 }

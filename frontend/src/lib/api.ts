@@ -54,6 +54,13 @@ export async function sendMessageStream(
     if (conversationId) {
       body.conversation_id = conversationId;
     }
+    // 从 localStorage 读取教学风格偏好
+    if (typeof window !== "undefined") {
+      const style = localStorage.getItem("mindflow_teaching_style");
+      if (style) {
+        body.style = style;
+      }
+    }
 
     const response = await fetch(`${API_URL}/api/chat`, {
       method: "POST",

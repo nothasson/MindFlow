@@ -141,6 +141,41 @@ Bloom 认知层级：%s
 	return resp.Content, nil
 }
 
+// GenerateConversationalQuiz 对话式考察模式：多轮追问深入考察学生理解
+func (q *QuizAgent) GenerateConversationalQuiz(ctx context.Context, concept string, round int, history string) (string, error) {
+	conversationalPrompt := fmt.Sprintf(`你是考察导师。通过多轮对话深入考察学生对「%s」的理解。
+
+当前是第 %d 轮。
+- 第 1 轮：提出开放性问题，让学生阐述对概念的理解
+- 第 2-3 轮：追问"为什么？""还有其他方式吗？"深入探究
+- 第 4-5 轮：提出反例或边界情况，测试理解深度
+- 第 6-7 轮：让学生总结核心要点
+- 第 8+ 轮：给出综合评估和评分（1-5分），格式为：
+
+**综合评估**
+- 评分：X/5
+- 优点：...
+- 不足：...
+- 建议：...
+
+对话历史：
+%s
+
+请根据当前轮次和对话历史，给出你的回复。使用中文。`, concept, round, history)
+
+	messages := []*schema.Message{
+		schema.SystemMessage(WrapPromptWithDefense(conversationalPrompt)),
+		schema.UserMessage("请继续对话考察"),
+	}
+
+	resp, err := q.chatModel.Generate(ctx, messages)
+	if err != nil {
+		return "", fmt.Errorf("对话考察失败: %w", err)
+	}
+
+	return resp.Content, nil
+}
+
 // EvaluateResult 评分结果
 type EvaluateResult struct {
 	Score       int    `json:"score"`

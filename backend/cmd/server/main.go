@@ -118,7 +118,7 @@ func main() {
 	}
 	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo, knowledgeRepo, chatAI)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
-	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo)
+	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo, chatModel)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)
 	courseHandler := handler.NewCourseHandler(courseRepo, resourceRepo, courseware)
 	dashboardHandler := handler.NewDashboardHandler(convRepo, msgRepo, resourceRepo, courseRepo, knowledgeRepo)
@@ -127,6 +127,10 @@ func main() {
 	quizRepo := repository.NewQuizRepo(db)
 	quizHandler := handler.NewQuizHandler(agent.NewQuizAgent(chatModel), agent.NewVariantQuizAgent(chatModel), knowledgeRepo, quizRepo)
 	wrongBookHandler := handler.NewWrongBookHandler(quizRepo)
+
+	// 初始化考试计划 Handler
+	examRepo := repository.NewExamRepo(db)
+	examHandler := handler.NewExamHandler(examRepo)
 
 	// 初始化晨间简报 Handler
 	curriculumAgent := agent.NewCurriculumAgent(chatModel)
@@ -306,6 +310,22 @@ func main() {
 	})
 	h.DELETE("/api/wrongbook/:id", func(ctx context.Context, c *app.RequestContext) {
 		wrongBookHandler.Delete(ctx, c)
+	})
+
+	// 考试计划路由
+	h.POST("/api/exam-plans", func(ctx context.Context, c *app.RequestContext) {
+		examHandler.Create(ctx, c)
+	})
+	h.GET("/api/exam-plans", func(ctx context.Context, c *app.RequestContext) {
+		examHandler.List(ctx, c)
+	})
+	h.DELETE("/api/exam-plans/:id", func(ctx context.Context, c *app.RequestContext) {
+		examHandler.Delete(ctx, c)
+	})
+
+	// 对话式考察路由
+	h.POST("/api/quiz/conversation", func(ctx context.Context, c *app.RequestContext) {
+		quizHandler.ConversationalQuiz(ctx, c)
 	})
 
 	// 晨间简报路由

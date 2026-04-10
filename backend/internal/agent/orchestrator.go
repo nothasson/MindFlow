@@ -54,23 +54,37 @@ type RouteDecision struct {
 type StuckDetector struct {
 	wrongCount   int // 连续错误轮次
 	correctCount int // 连续正确轮次
+	totalCount   int // 总回答轮次（用于计算错误率）
+	totalWrong   int // 总错误轮次
 }
 
 // OnDiagnostic 根据诊断结果更新计数
 func (d *StuckDetector) OnDiagnostic(isCorrect bool) {
+	d.totalCount++
 	if isCorrect {
 		d.correctCount++
 		d.wrongCount = 0
 	} else {
 		d.wrongCount++
+		d.totalWrong++
 		d.correctCount = 0
 	}
+}
+
+// ErrorRate 返回历史错误率（0.0 ~ 1.0），无数据时返回 0
+func (d *StuckDetector) ErrorRate() float64 {
+	if d.totalCount == 0 {
+		return 0
+	}
+	return float64(d.totalWrong) / float64(d.totalCount)
 }
 
 // Reset 重置计数
 func (d *StuckDetector) Reset() {
 	d.wrongCount = 0
 	d.correctCount = 0
+	d.totalCount = 0
+	d.totalWrong = 0
 }
 
 // SupportLevel 返回当前应使用的支持力度
@@ -187,6 +201,11 @@ func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (st
 		}
 	}
 
+	// 每轮对话后自动检测并调整教学难度
+	if err == nil {
+		o.autoAdjustLevel()
+	}
+
 	return reply, err
 }
 
@@ -203,6 +222,9 @@ func (o *Orchestrator) ChatStream(ctx context.Context, messages []*schema.Messag
 	}
 
 	decision, _ := o.Route(ctx, messages)
+
+	// 流式对话结束后自动调整教学难度
+	defer o.autoAdjustLevel()
 
 	switch decision.Agent {
 	case AgentTypeQuiz:
@@ -317,6 +339,39 @@ func (o *Orchestrator) GetKnowledgeRepo() interface{} {
 // GetStuckDetector 返回卡住检测器（供外部更新状态）
 func (o *Orchestrator) GetStuckDetector() *StuckDetector {
 	return o.stuckDetector
+}
+
+// DetectTeachingLevel 根据最近对话信号自动调整教学难度
+// 基于错误率和连续正确/错误次数综合判断
+func (o *Orchestrator) DetectTeachingLevel() DifficultyLevel {
+	detector := o.stuckDetector
+	errorRate := detector.ErrorRate()
+
+	switch {
+	case errorRate > 0.6:
+		// 错误率超过 60%，降为初学者模式
+		return LevelBeginner
+	case errorRate < 0.2 && detector.correctCount >= 3:
+		// 错误率低于 20% 且连续正确 >= 3，提升为专家模式
+		return LevelExpert
+	default:
+		return LevelAdvanced
+	}
+}
+
+// autoAdjustLevel 根据对话表现自动调整教学难度并应用到 tutor
+func (o *Orchestrator) autoAdjustLevel() {
+	// 至少有 3 轮对话数据才开始自动调整
+	if o.stuckDetector.totalCount < 3 {
+		return
+	}
+	newLevel := o.DetectTeachingLevel()
+	if newLevel != o.tutor.GetLevel() {
+		o.tutor.SetLevel(newLevel)
+		log.Printf("教学难度自动调整为: %s (错误率: %.1f%%, 连续正确: %d, 连续错误: %d)",
+			newLevel, o.stuckDetector.ErrorRate()*100,
+			o.stuckDetector.correctCount, o.stuckDetector.wrongCount)
+	}
 }
 
 // supportLevelHint 根据支持力度生成注入 Prompt 的提示

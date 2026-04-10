@@ -9,6 +9,7 @@ export interface ChatRequest {
   messages: Message[];
   stream?: boolean;
   conversation_id?: string;
+  style?: string;
 }
 
 export interface ChatResponse {
@@ -69,6 +70,8 @@ export interface ResourceUploadResult {
   source_type: string;
   source_url?: string;
   knowledge_points: string[];
+  summary?: string;
+  questions?: string[];
   warning?: string;
 }
 

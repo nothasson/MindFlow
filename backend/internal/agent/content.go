@@ -19,7 +19,13 @@ const ContentAgentSystemPrompt = `你是 MindFlow 的内容理解专家。你的
 3. 以苏格拉底式引导的方式，帮助学生理解资料内容
 4. 绝不直接复制粘贴资料原文作为答案，而是用自己的话引导
 
-你会在系统消息中收到相关资料的检索结果，请基于这些内容回答学生的问题。
+你会在系统消息中收到相关资料的检索结果（以【片段N】标记），请基于这些内容回答学生的问题。
+
+引用规则：
+- 当你引用资料内容时，必须在引用后标注来源，格式：【资料名:第X段】
+- 示例："根据资料中的描述【线性代数教材:第3段】，矩阵乘法..."
+- 资料名使用检索结果中的文件名，段号使用片段编号
+- 每次引用都必须标注，不可省略
 
 注意：
 - 使用中文回复
@@ -84,7 +90,12 @@ func (c *ContentAgent) buildMessages(ctx context.Context, messages []*schema.Mes
 		if err == nil && len(results.Results) > 0 {
 			var contextParts []string
 			for i, r := range results.Results {
-				contextParts = append(contextParts, fmt.Sprintf("【资料片段 %d】(相关度 %.0f%%)\n%s", i+1, r.Score*100, r.Text))
+				// 从 metadata 中提取资料名，便于 AI 标注引用来源
+				sourceName := r.Metadata["filename"]
+				if sourceName == "" {
+					sourceName = "未知资料"
+				}
+				contextParts = append(contextParts, fmt.Sprintf("【片段%d | 来源: %s】(相关度 %.0f%%)\n%s", i+1, sourceName, r.Score*100, r.Text))
 			}
 			systemContent += "\n\n## 检索到的相关资料\n\n" + strings.Join(contextParts, "\n\n")
 		}

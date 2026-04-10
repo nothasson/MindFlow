@@ -1,0 +1,3 @@
+-- 资料概览：摘要和建议学习问题
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS summary TEXT NOT NULL DEFAULT '';
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS questions TEXT[] DEFAULT '{}';

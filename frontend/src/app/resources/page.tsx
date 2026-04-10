@@ -166,6 +166,31 @@ export default function ResourcesPage() {
                 </div>
               ) : null}
 
+              {/* 资料摘要 */}
+              {result.summary ? (
+                <div className="mb-4 rounded-xl bg-amber-50 p-4">
+                  <h3 className="mb-2 text-sm font-medium text-stone-700">资料摘要</h3>
+                  <p className="text-sm leading-relaxed text-stone-600">{result.summary}</p>
+                </div>
+              ) : null}
+
+              {/* 建议学习问题 */}
+              {result.questions && result.questions.length > 0 ? (
+                <div className="mb-4 rounded-xl bg-blue-50 p-4">
+                  <h3 className="mb-2 text-sm font-medium text-stone-700">建议学习问题</h3>
+                  <ul className="space-y-2">
+                    {result.questions.map((q, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-stone-600">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-700">
+                          {i + 1}
+                        </span>
+                        <span>{q}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               {/* 操作按钮 */}
               <div className="mb-4 flex gap-3">
                 <Link

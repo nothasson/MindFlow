@@ -14,6 +14,12 @@ interface WeakPoint {
   confidence: number;
 }
 
+// 对话考察消息
+interface ConvMessage {
+  role: "ai" | "user";
+  content: string;
+}
+
 export default function QuizPage() {
   const searchParams = useSearchParams();
   const urlConcept = searchParams?.get("concept") ?? "";
@@ -32,6 +38,15 @@ export default function QuizPage() {
   // 薄弱知识点列表（自动推荐用）
   const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
   const [loadingWeak, setLoadingWeak] = useState(true);
+
+  // 对话考察模式
+  const [convMode, setConvMode] = useState(false);
+  const [convMessages, setConvMessages] = useState<ConvMessage[]>([]);
+  const [convInput, setConvInput] = useState("");
+  const [convSessionId, setConvSessionId] = useState("");
+  const [convLoading, setConvLoading] = useState(false);
+  const [convFinished, setConvFinished] = useState(false);
+  const [convRound, setConvRound] = useState(0);
 
   // 进入页面时自动加载薄弱知识点
   useEffect(() => {
@@ -141,6 +156,80 @@ export default function QuizPage() {
     resetQuiz();
   };
 
+  // 对话考察：开始
+  const startConversation = async () => {
+    if (!concept) return;
+    setConvMode(true);
+    setConvMessages([]);
+    setConvFinished(false);
+    setConvRound(0);
+    setConvInput("");
+    setError(null);
+
+    // 生成唯一会话 ID
+    const sid = `conv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setConvSessionId(sid);
+
+    // 发起第一轮（空 message，触发 AI 出第一个问题）
+    setConvLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/quiz/conversation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ concept, message: "", session_id: sid }),
+      });
+      if (!res.ok) throw new Error("启动对话考察失败");
+      const data = await res.json();
+      setConvMessages([{ role: "ai", content: data.reply }]);
+      setConvRound(data.round);
+      setConvFinished(data.finished);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "启动对话考察失败");
+      setConvMode(false);
+    } finally {
+      setConvLoading(false);
+    }
+  };
+
+  // 对话考察：发送回答
+  const sendConvMessage = async () => {
+    if (!convInput.trim() || convLoading || convFinished) return;
+    const userMsg = convInput.trim();
+    setConvInput("");
+    setConvMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    setConvLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/quiz/conversation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          concept,
+          message: userMsg,
+          session_id: convSessionId,
+        }),
+      });
+      if (!res.ok) throw new Error("发送失败");
+      const data = await res.json();
+      setConvMessages((prev) => [...prev, { role: "ai", content: data.reply }]);
+      setConvRound(data.round);
+      setConvFinished(data.finished);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "发送失败");
+    } finally {
+      setConvLoading(false);
+    }
+  };
+
+  // 退出对话考察
+  const exitConversation = () => {
+    setConvMode(false);
+    setConvMessages([]);
+    setConvFinished(false);
+    setConvRound(0);
+    setConvSessionId("");
+  };
+
   const avgScore = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : "0";
 
   return (
@@ -149,7 +238,95 @@ export default function QuizPage() {
         <div className="mx-auto w-full max-w-3xl overflow-y-auto px-4 py-12">
           <h1 className="mb-2 text-2xl font-semibold text-stone-800">知识测验</h1>
 
-          {loadingWeak ? (
+          {/* 对话考察模式 */}
+          {convMode ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-stone-500">
+                  对话考察：{concept}（第 {convRound} 轮）
+                </p>
+                <button
+                  type="button"
+                  onClick={exitConversation}
+                  className="rounded-lg border border-stone-200 px-3 py-1 text-sm text-stone-600 transition hover:bg-stone-100"
+                >
+                  退出考察
+                </button>
+              </div>
+
+              {/* 对话消息列表 */}
+              <div className="space-y-3">
+                {convMessages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`rounded-2xl p-4 ${
+                      msg.role === "ai"
+                        ? "border border-stone-200 bg-white"
+                        : "ml-8 border border-[#C67A4A]/20 bg-[#C67A4A]/5"
+                    }`}
+                  >
+                    <p className="mb-1 text-[11px] font-medium text-stone-400">
+                      {msg.role === "ai" ? "考察导师" : "我的回答"}
+                    </p>
+                    <MarkdownRenderer content={msg.content} />
+                  </div>
+                ))}
+                {convLoading && (
+                  <div className="rounded-2xl border border-stone-200 bg-white p-4">
+                    <p className="text-sm text-stone-400">思考中...</p>
+                  </div>
+                )}
+              </div>
+
+              {/* 输入框 */}
+              {!convFinished ? (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={convInput}
+                    onChange={(e) => setConvInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendConvMessage();
+                      }
+                    }}
+                    placeholder="输入你的回答..."
+                    disabled={convLoading}
+                    className="flex-1 rounded-xl border border-stone-200 px-4 py-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400 disabled:bg-stone-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={sendConvMessage}
+                    disabled={!convInput.trim() || convLoading}
+                    className="rounded-xl bg-stone-800 px-5 py-3 text-sm font-medium text-white transition hover:bg-stone-700 disabled:bg-stone-400"
+                  >
+                    发送
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-stone-200 bg-white p-4 text-center">
+                  <p className="mb-3 text-sm text-stone-600">对话考察已完成</p>
+                  <div className="flex justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={exitConversation}
+                      className="rounded-lg bg-[#C67A4A] px-4 py-2 text-sm text-white transition hover:bg-[#b06a3a]"
+                    >
+                      返回
+                    </button>
+                    <button
+                      type="button"
+                      onClick={startConversation}
+                      className="rounded-lg border border-stone-200 px-4 py-2 text-sm text-stone-700 transition hover:bg-stone-100"
+                    >
+                      重新考察
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : loadingWeak ? (
             <p className="text-sm text-stone-400">正在分析你的学习状态...</p>
           ) : !concept && weakPoints.length === 0 ? (
             /* 没有任何知识点 */
@@ -182,14 +359,24 @@ export default function QuizPage() {
                     掌握度 {Math.round((weakPoints.find((w) => w.concept === concept)?.confidence ?? 0) * 100)}%，需要巩固
                   </p>
                 )}
-                <button
-                  type="button"
-                  onClick={generateQuiz}
-                  disabled={loading}
-                  className="rounded-lg bg-[#C67A4A] px-6 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a] disabled:bg-stone-400"
-                >
-                  {loading ? "出题中..." : "开始测验"}
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={generateQuiz}
+                    disabled={loading}
+                    className="rounded-lg bg-[#C67A4A] px-6 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a] disabled:bg-stone-400"
+                  >
+                    {loading ? "出题中..." : "开始测验"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startConversation}
+                    disabled={convLoading || !concept}
+                    className="rounded-lg border-2 border-[#C67A4A] px-6 py-2 text-sm font-medium text-[#C67A4A] transition hover:bg-[#C67A4A]/5 disabled:border-stone-300 disabled:text-stone-400"
+                  >
+                    {convLoading ? "启动中..." : "对话考察"}
+                  </button>
+                </div>
               </div>
 
               {/* 其他薄弱知识点可选列表 */}
@@ -314,7 +501,7 @@ export default function QuizPage() {
                   </div>
                   {result.explanation && (
                     <div className="mb-4 rounded-xl bg-stone-50 p-4">
-                      <p className="mb-1 text-xs font-medium text-stone-500">💡 解析</p>
+                      <p className="mb-1 text-xs font-medium text-stone-500">解析</p>
                       <p className="text-sm leading-relaxed text-stone-700">{result.explanation}</p>
                     </div>
                   )}

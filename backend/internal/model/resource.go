@@ -18,6 +18,8 @@ type Resource struct {
 	Pages            int       `json:"pages"`
 	ChunkCount       int       `json:"chunk_count"`
 	Status           string    `json:"status"`
+	Summary          string    `json:"summary,omitempty"`
+	Questions        []string  `json:"questions,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }

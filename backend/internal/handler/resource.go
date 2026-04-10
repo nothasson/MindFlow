@@ -2,15 +2,19 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/google/uuid"
 
-	"github.com/nothasson/MindFlow/backend/internal/model"
+	mdl "github.com/nothasson/MindFlow/backend/internal/model"
 	"github.com/nothasson/MindFlow/backend/internal/repository"
 	"github.com/nothasson/MindFlow/backend/internal/service"
 )
@@ -26,8 +30,9 @@ type resourceAIClient interface {
 
 // resourceStore 抽象资料存储能力，便于测试。
 type resourceStore interface {
-	Create(ctx context.Context, resource *model.Resource) (*model.Resource, error)
+	Create(ctx context.Context, resource *mdl.Resource) (*mdl.Resource, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string, chunkCount int) error
+	UpdateOverview(ctx context.Context, id uuid.UUID, summary string, questions []string) error
 }
 
 // knowledgeWriter 抽象知识点写入能力，便于测试。
@@ -45,15 +50,21 @@ type ResourceHandler struct {
 	aiClient        resourceAIClient
 	resourceStore   resourceStore
 	knowledgeWriter knowledgeWriter
+	chatModel       model.ChatModel // 用于生成资料概览
 }
 
 // NewResourceHandler 创建资料处理器。
-func NewResourceHandler(aiClient resourceAIClient, resourceStore resourceStore, knowledgeWriter knowledgeWriter) *ResourceHandler {
-	return &ResourceHandler{
+// chatModel 可为 nil，此时跳过概览生成。
+func NewResourceHandler(aiClient resourceAIClient, resourceStore resourceStore, knowledgeWriter knowledgeWriter, chatModel ...model.ChatModel) *ResourceHandler {
+	h := &ResourceHandler{
 		aiClient:        aiClient,
 		resourceStore:   resourceStore,
 		knowledgeWriter: knowledgeWriter,
 	}
+	if len(chatModel) > 0 && chatModel[0] != nil {
+		h.chatModel = chatModel[0]
+	}
+	return h
 }
 
 // Upload POST /api/resources/upload
@@ -162,7 +173,7 @@ func (h *ResourceHandler) ensureReady(c *app.RequestContext) error {
 
 func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestContext, input ingestInput) {
 	chunks := splitText(input.ContentText, 500)
-	resource, err := h.resourceStore.Create(ctx, &model.Resource{
+	resource, err := h.resourceStore.Create(ctx, &mdl.Resource{
 		SourceType:       input.SourceType,
 		Title:            input.Title,
 		OriginalFilename: input.OriginalFilename,
@@ -258,6 +269,21 @@ func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestCont
 		return
 	}
 
+	// 调用 LLM 生成资料摘要和建议学习问题
+	if h.chatModel != nil && input.ContentText != "" {
+		summary, questions, err := h.generateOverview(ctx, input.Title, input.ContentText)
+		if err != nil {
+			warnings = append(warnings, "概览生成失败: "+err.Error())
+		} else {
+			response["summary"] = summary
+			response["questions"] = questions
+			// 持久化概览到数据库
+			if err := h.resourceStore.UpdateOverview(ctx, resource.ID, summary, questions); err != nil {
+				warnings = append(warnings, "概览保存失败: "+err.Error())
+			}
+		}
+	}
+
 	if len(warnings) > 0 {
 		response["warning"] = warnings[0]
 	}
@@ -284,4 +310,70 @@ func splitText(text string, chunkSize int) []string {
 		}
 	}
 	return chunks
+}
+
+// overviewResponse LLM 生成概览的 JSON 响应结构
+type overviewResponse struct {
+	Summary   string   `json:"summary"`
+	Questions []string `json:"questions"`
+}
+
+// generateOverview 调用 LLM 生成资料摘要和建议学习问题。
+// 截取资料前 2000 字符作为输入，避免 token 过长。
+func (h *ResourceHandler) generateOverview(ctx context.Context, title, contentText string) (string, []string, error) {
+	// 截取前 2000 字符，避免超出 LLM token 限制
+	runes := []rune(contentText)
+	if len(runes) > 2000 {
+		runes = runes[:2000]
+	}
+	excerpt := string(runes)
+
+	prompt := fmt.Sprintf(`请为以下学习资料生成概览。
+
+资料标题：%s
+资料内容（节选）：
+%s
+
+请以 JSON 格式返回，包含两个字段：
+1. "summary"：200字以内的中文摘要，概括资料的核心内容和学习价值
+2. "questions"：3-5个建议学习问题，帮助学生围绕资料展开思考
+
+只返回 JSON，不要包含其他文字或 markdown 代码块标记。
+示例格式：
+{"summary":"这份资料介绍了...","questions":["问题1","问题2","问题3"]}`, title, excerpt)
+
+	messages := []*schema.Message{
+		schema.SystemMessage("你是一个学习资料分析助手。请严格按照要求返回 JSON 格式的概览。"),
+		schema.UserMessage(prompt),
+	}
+
+	resp, err := h.chatModel.Generate(ctx, messages)
+	if err != nil {
+		return "", nil, fmt.Errorf("LLM 调用失败: %w", err)
+	}
+
+	// 清理可能的 markdown 代码块包装
+	content := strings.TrimSpace(resp.Content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
+	var overview overviewResponse
+	if err := json.Unmarshal([]byte(content), &overview); err != nil {
+		return "", nil, fmt.Errorf("解析概览 JSON 失败: %w", err)
+	}
+
+	// 截断摘要到 200 字
+	summaryRunes := []rune(overview.Summary)
+	if len(summaryRunes) > 200 {
+		overview.Summary = string(summaryRunes[:200]) + "..."
+	}
+
+	// 限制问题数量在 3-5 个
+	if len(overview.Questions) > 5 {
+		overview.Questions = overview.Questions[:5]
+	}
+
+	return overview.Summary, overview.Questions, nil
 }

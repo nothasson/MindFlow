@@ -69,11 +69,11 @@ func (r *ResourceRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status st
 func (r *ResourceRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Resource, error) {
 	var res model.Resource
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, created_at, updated_at
+		SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, summary, questions, created_at, updated_at
 		FROM resources WHERE id = $1
 	`, id).Scan(
 		&res.ID, &res.SourceType, &res.Title, &res.OriginalFilename, &res.SourceURL,
-		&res.ContentText, &res.Pages, &res.ChunkCount, &res.Status, &res.CreatedAt, &res.UpdatedAt,
+		&res.ContentText, &res.Pages, &res.ChunkCount, &res.Status, &res.Summary, &res.Questions, &res.CreatedAt, &res.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (r *ResourceRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Resour
 // List 获取资料列表
 func (r *ResourceRepo) List(ctx context.Context) ([]model.Resource, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, created_at, updated_at
+		SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, summary, questions, created_at, updated_at
 		FROM resources ORDER BY created_at DESC LIMIT 50
 	`)
 	if err != nil {
@@ -97,7 +97,7 @@ func (r *ResourceRepo) List(ctx context.Context) ([]model.Resource, error) {
 		var res model.Resource
 		if err := rows.Scan(
 			&res.ID, &res.SourceType, &res.Title, &res.OriginalFilename, &res.SourceURL,
-			&res.ContentText, &res.Pages, &res.ChunkCount, &res.Status, &res.CreatedAt, &res.UpdatedAt,
+			&res.ContentText, &res.Pages, &res.ChunkCount, &res.Status, &res.Summary, &res.Questions, &res.CreatedAt, &res.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -111,4 +111,14 @@ func (r *ResourceRepo) Count(ctx context.Context) (int, error) {
 	var count int
 	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM resources`).Scan(&count)
 	return count, err
+}
+
+// UpdateOverview 保存资料摘要和建议学习问题。
+func (r *ResourceRepo) UpdateOverview(ctx context.Context, id uuid.UUID, summary string, questions []string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE resources
+		SET summary = $1, questions = $2, updated_at = NOW()
+		WHERE id = $3
+	`, summary, questions, id)
+	return err
 }

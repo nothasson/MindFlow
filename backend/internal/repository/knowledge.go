@@ -422,6 +422,34 @@ func (r *KnowledgeRepo) GetConceptConfidence(ctx context.Context, concept string
 	return confidence, nil
 }
 
+// GetSimilarPairs 获取所有 similar 关系对，返回 map[概念][]相似概念
+func (r *KnowledgeRepo) GetSimilarPairs(ctx context.Context) (map[string][]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT from_concept, to_concept
+		 FROM knowledge_relations
+		 WHERE relation_type = 'similar'
+		   AND (valid_to IS NULL OR valid_to > NOW())`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	pairs := make(map[string][]string)
+	for rows.Next() {
+		var from, to string
+		if err := rows.Scan(&from, &to); err != nil {
+			return nil, err
+		}
+		pairs[from] = append(pairs[from], to)
+		pairs[to] = append(pairs[to], from) // 双向关系
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return pairs, nil
+}
+
 // UpdateErrorType 更新知识点的错误类型
 func (r *KnowledgeRepo) UpdateErrorType(ctx context.Context, concept string, errorType string) error {
 	_, err := r.pool.Exec(ctx,

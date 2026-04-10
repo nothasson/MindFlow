@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -176,5 +177,55 @@ func (h *QuizHandler) GenerateVariant(ctx context.Context, c *app.RequestContext
 	c.JSON(http.StatusOK, utils.H{
 		"concept": req.Concept,
 		"variant": result,
+	})
+}
+
+// ConversationalQuiz POST /api/quiz/conversation — 对话式考察
+func (h *QuizHandler) ConversationalQuiz(ctx context.Context, c *app.RequestContext) {
+	var req struct {
+		Concept string `json:"concept"`
+		Message string `json:"message"`
+		Round   int    `json:"round"`
+		History string `json:"history"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "请求格式错误"})
+		return
+	}
+	if req.Concept == "" || req.Message == "" {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "请提供概念和回答内容"})
+		return
+	}
+	if req.Round <= 0 {
+		req.Round = 1
+	}
+
+	// 把当前消息追加到历史
+	fullHistory := req.History
+	if fullHistory != "" {
+		fullHistory += "\n"
+	}
+	fullHistory += fmt.Sprintf("学生（第%d轮）：%s", req.Round, req.Message)
+
+	genCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	result, err := h.quiz.GenerateConversationalQuiz(genCtx, req.Concept, req.Round, fullHistory)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "对话考察失败: " + err.Error()})
+		return
+	}
+
+	// 更新历史
+	fullHistory += fmt.Sprintf("\n导师（第%d轮）：%s", req.Round, result)
+
+	// 判断是否完成（第 8 轮及以上）
+	finished := req.Round >= 8
+
+	c.JSON(http.StatusOK, utils.H{
+		"reply":    result,
+		"round":    req.Round + 1,
+		"history":  fullHistory,
+		"finished": finished,
 	})
 }
