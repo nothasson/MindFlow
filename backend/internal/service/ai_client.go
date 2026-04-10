@@ -119,6 +119,38 @@ type ExtractResponse struct {
 	Points []KnowledgePoint `json:"points"`
 }
 
+// KnowledgeEmbedRequest 知识点向量化请求
+type KnowledgeEmbedRequest struct {
+	Concept     string            `json:"concept"`
+	Description string            `json:"description"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+// KnowledgeEmbedResponse 知识点向量化响应
+type KnowledgeEmbedResponse struct {
+	PointID string `json:"point_id"`
+	Concept string `json:"concept"`
+}
+
+// KnowledgeSearchRequest 知识点语义搜索请求
+type KnowledgeSearchRequest struct {
+	Query string `json:"query"`
+	TopK  int    `json:"top_k"`
+}
+
+// KnowledgeSearchResult 知识点搜索结果
+type KnowledgeSearchResult struct {
+	Concept     string            `json:"concept"`
+	Description string            `json:"description"`
+	Score       float64           `json:"score"`
+	Metadata    map[string]string `json:"metadata"`
+}
+
+// KnowledgeSearchResponse 知识点搜索响应
+type KnowledgeSearchResponse struct {
+	Results []KnowledgeSearchResult `json:"results"`
+}
+
 // --- API 方法 ---
 
 // ParseDocument 解析上传的文档
@@ -210,6 +242,32 @@ func (c *AIClient) ExtractKnowledgePointsWithContext(text string, existingConcep
 		return nil, fmt.Errorf("知识点提取失败: %w", err)
 	}
 	return &result, nil
+}
+
+// EmbedKnowledge 将知识点写入向量库
+func (c *AIClient) EmbedKnowledge(concept, description string) error {
+	body := KnowledgeEmbedRequest{
+		Concept:     concept,
+		Description: description,
+	}
+	var result KnowledgeEmbedResponse
+	if err := c.postJSON("/knowledge/embed", body, &result); err != nil {
+		return fmt.Errorf("知识点向量化失败: %w", err)
+	}
+	return nil
+}
+
+// SearchKnowledge 语义搜索知识点
+func (c *AIClient) SearchKnowledge(query string, topK int) ([]KnowledgeSearchResult, error) {
+	body := KnowledgeSearchRequest{
+		Query: query,
+		TopK:  topK,
+	}
+	var result KnowledgeSearchResponse
+	if err := c.postJSON("/knowledge/search", body, &result); err != nil {
+		return nil, fmt.Errorf("知识点搜索失败: %w", err)
+	}
+	return result.Results, nil
 }
 
 // Health 检查 AI 服务健康状态（带重试）

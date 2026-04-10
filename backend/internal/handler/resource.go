@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -26,6 +27,7 @@ type resourceAIClient interface {
 	Embed(texts []string) (*service.EmbedResponse, error)
 	Upsert(collection string, texts []string, embeddings [][]float64, metadata map[string]string) (*service.UpsertResponse, error)
 	ExtractKnowledgePoints(text string) (*service.ExtractResponse, error)
+	EmbedKnowledge(concept, description string) error
 }
 
 // resourceStore 抽象资料存储能力，便于测试。
@@ -40,6 +42,11 @@ type knowledgeWriter interface {
 	UpsertExtractedPoints(ctx context.Context, points []repository.ExtractedKnowledgePoint) error
 }
 
+// sourceLinkWriter 抽象来源关联写入能力，便于测试。
+type sourceLinkWriter interface {
+	CreateLink(ctx context.Context, concept, sourceType string, sourceID uuid.UUID, position string) error
+}
+
 // URLImportRequest URL 导入请求。
 type URLImportRequest struct {
 	URL string `json:"url"`
@@ -47,10 +54,11 @@ type URLImportRequest struct {
 
 // ResourceHandler 资料上传处理器。
 type ResourceHandler struct {
-	aiClient        resourceAIClient
-	resourceStore   resourceStore
-	knowledgeWriter knowledgeWriter
-	chatModel       model.ChatModel // 用于生成资料概览
+	aiClient         resourceAIClient
+	resourceStore    resourceStore
+	knowledgeWriter  knowledgeWriter
+	sourceLinkWriter sourceLinkWriter // 来源关联写入（可选）
+	chatModel        model.ChatModel  // 用于生成资料概览
 }
 
 // NewResourceHandler 创建资料处理器。
@@ -65,6 +73,11 @@ func NewResourceHandler(aiClient resourceAIClient, resourceStore resourceStore, 
 		h.chatModel = chatModel[0]
 	}
 	return h
+}
+
+// SetSourceLinkWriter 注入来源关联写入器（可选）。
+func (h *ResourceHandler) SetSourceLinkWriter(w sourceLinkWriter) {
+	h.sourceLinkWriter = w
 }
 
 // Upload POST /api/resources/upload
@@ -258,6 +271,30 @@ func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestCont
 				response["knowledge_points"] = names
 				if response["status"] == "indexed" {
 					response["status"] = "ready"
+				}
+				// 知识点向量化：将每个知识点写入向量库，解锁语义搜索
+				for _, pt := range points {
+					if err := h.aiClient.EmbedKnowledge(pt.Concept, pt.Description); err != nil {
+						log.Printf("知识点向量化失败 (concept=%s): %v", pt.Concept, err)
+					}
+				}
+				// 写入来源关联：将提取出的知识点与资料建立关联
+				if h.sourceLinkWriter != nil {
+					for _, name := range names {
+						if err := h.sourceLinkWriter.CreateLink(ctx, name, "resource", resource.ID, ""); err != nil {
+							log.Printf("写入来源关联失败 (concept=%s, resource=%s): %v", name, resource.ID, err)
+						}
+					}
+				}
+
+				// 知识点向量化：将每个知识点的 concept+description 存入 Qdrant
+				for _, point := range extractResult.Points {
+					if point.Concept == "" {
+						continue
+					}
+					if err := h.aiClient.EmbedKnowledge(point.Concept, point.Description); err != nil {
+						log.Printf("知识点向量化失败 (concept=%s): %v", point.Concept, err)
+					}
 				}
 			}
 		}

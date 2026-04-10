@@ -88,3 +88,13 @@ export interface DailyBriefing {
   new_items: BriefingItem[];
   quiz_suggestion?: BriefingItem | null;
 }
+
+/** 知识点来源关联 */
+export interface KnowledgeSourceLink {
+  id: string;
+  concept: string;
+  source_type: "resource" | "conversation" | "quiz";
+  source_id: string;
+  page_or_position: string;
+  created_at: string;
+}

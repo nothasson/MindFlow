@@ -56,6 +56,10 @@ func (s *stubAIClient) ExtractKnowledgePoints(text string) (*service.ExtractResp
 	}, nil
 }
 
+func (s *stubAIClient) EmbedKnowledge(concept, description string) error {
+	return nil
+}
+
 type stubResourceStore struct {
 	created *model.Resource
 	updated []resourceStatusUpdate

@@ -4,8 +4,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MainShell } from "@/components/layout/MainShell";
-import { getKnowledgeGraph } from "@/lib/api";
-import type { KnowledgeNode, KnowledgeEdge } from "@/lib/types";
+import { getKnowledgeGraph, getKnowledgeSources } from "@/lib/api";
+import type { KnowledgeNode, KnowledgeEdge, KnowledgeSourceLink } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -35,10 +35,25 @@ export default function KnowledgePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<KnowledgeNode | null>(null);
+  const [sources, setSources] = useState<KnowledgeSourceLink[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const simNodesRef = useRef<SimNode[]>([]);
   const animRef = useRef<number>(0);
+
+  // 选中知识点时加载来源关联
+  useEffect(() => {
+    if (!selected) {
+      setSources([]);
+      return;
+    }
+    setSourcesLoading(true);
+    getKnowledgeSources(selected.concept)
+      .then(setSources)
+      .catch(() => setSources([]))
+      .finally(() => setSourcesLoading(false));
+  }, [selected]);
 
   useEffect(() => {
     getKnowledgeGraph()
@@ -427,6 +442,35 @@ export default function KnowledgePage() {
                 </div>
               </div>
             )}
+
+            {/* 来源追溯 */}
+            <div>
+              <p className="text-xs text-stone-400">来源追溯</p>
+              {sourcesLoading ? (
+                <p className="mt-1 text-xs text-stone-400">加载中...</p>
+              ) : sources.length === 0 ? (
+                <p className="mt-1 text-xs text-stone-400">暂无来源记录</p>
+              ) : (
+                <div className="mt-1 space-y-1.5">
+                  {sources.map((s) => (
+                    <div
+                      key={s.id}
+                      className="rounded-md bg-stone-50 px-2.5 py-1.5 text-xs text-stone-600"
+                    >
+                      <span className="inline-block rounded bg-stone-200 px-1.5 py-0.5 text-[10px] font-medium text-stone-500">
+                        {s.source_type === "resource" ? "资料" : s.source_type === "quiz" ? "测验" : "对话"}
+                      </span>
+                      <span className="ml-1.5 text-stone-400">
+                        {new Date(s.created_at).toLocaleDateString("zh-CN")}
+                      </span>
+                      {s.page_or_position && (
+                        <span className="ml-1 text-stone-400">· {s.page_or_position}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -3,22 +3,42 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 
 	"github.com/nothasson/MindFlow/backend/internal/knowledge"
+	"github.com/nothasson/MindFlow/backend/internal/model"
 	"github.com/nothasson/MindFlow/backend/internal/repository"
+	"github.com/nothasson/MindFlow/backend/internal/service"
 )
+
+// knowledgeAIClient 抽象知识点搜索所需的 AI 微服务能力
+type knowledgeAIClient interface {
+	SearchKnowledge(query string, topK int) ([]service.KnowledgeSearchResult, error)
+}
 
 // KnowledgeHandler 知识图谱处理器
 type KnowledgeHandler struct {
-	repo *repository.KnowledgeRepo
+	repo           *repository.KnowledgeRepo
+	sourceLinkRepo *repository.SourceLinkRepo // 来源关联（可选）
+	aiClient       knowledgeAIClient          // AI 微服务客户端（可选，用于语义搜索）
 }
 
 // NewKnowledgeHandler 创建知识图谱处理器
 func NewKnowledgeHandler(repo *repository.KnowledgeRepo) *KnowledgeHandler {
 	return &KnowledgeHandler{repo: repo}
+}
+
+// SetSourceLinkRepo 注入来源关联仓库（可选）。
+func (h *KnowledgeHandler) SetSourceLinkRepo(repo *repository.SourceLinkRepo) {
+	h.sourceLinkRepo = repo
+}
+
+// SetAIClient 注入 AI 微服务客户端（可选，用于语义搜索）。
+func (h *KnowledgeHandler) SetAIClient(client knowledgeAIClient) {
+	h.aiClient = client
 }
 
 // Graph GET /api/knowledge/graph
@@ -131,4 +151,64 @@ func (h *KnowledgeHandler) DeleteConcept(ctx context.Context, c *app.RequestCont
 	}
 
 	c.JSON(http.StatusOK, utils.H{"success": true})
+}
+
+// Sources GET /api/knowledge/sources?concept=xxx
+// 查询知识点的所有来源（资料、测验、对话）
+func (h *KnowledgeHandler) Sources(ctx context.Context, c *app.RequestContext) {
+	concept := c.Query("concept")
+	if concept == "" {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "缺少 concept 参数"})
+		return
+	}
+
+	if h.sourceLinkRepo == nil {
+		c.JSON(http.StatusOK, utils.H{"concept": concept, "sources": []interface{}{}})
+		return
+	}
+
+	links, err := h.sourceLinkRepo.GetLinksByConcept(ctx, concept)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "查询来源失败: " + err.Error()})
+		return
+	}
+
+	if links == nil {
+		links = []model.KnowledgeSourceLink{}
+	}
+
+	c.JSON(http.StatusOK, utils.H{
+		"concept": concept,
+		"sources": links,
+	})
+}
+
+// SemanticSearch GET /api/knowledge/search?q=xxx&top_k=5
+// 语义搜索知识点，通过 AI 微服务调用 Qdrant 向量搜索
+func (h *KnowledgeHandler) SemanticSearch(ctx context.Context, c *app.RequestContext) {
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "缺少搜索关键词参数 q"})
+		return
+	}
+
+	if h.aiClient == nil {
+		c.JSON(http.StatusServiceUnavailable, utils.H{"error": "AI 微服务不可用，无法进行语义搜索"})
+		return
+	}
+
+	topK := 5
+	if topKStr := c.Query("top_k"); topKStr != "" {
+		if v, err := strconv.Atoi(topKStr); err == nil && v > 0 {
+			topK = v
+		}
+	}
+
+	results, err := h.aiClient.SearchKnowledge(query, topK)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "知识点搜索失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, utils.H{"results": results})
 }

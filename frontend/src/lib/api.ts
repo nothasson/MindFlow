@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, Conversation, DailyBriefing, KnowledgeGraph, Message, ResourceUploadResult, SSEEvent } from "@/lib/types";
+import type { ChatRequest, ChatResponse, Conversation, DailyBriefing, KnowledgeGraph, KnowledgeSourceLink, Message, ResourceUploadResult, SSEEvent } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -260,4 +260,12 @@ export async function importUrlResource(url: string): Promise<ResourceUploadResu
   }
 
   return response.json();
+}
+
+/** 查询知识点的所有来源（资料、测验、对话） */
+export async function getKnowledgeSources(concept: string): Promise<KnowledgeSourceLink[]> {
+  const response = await fetch(`${API_URL}/api/knowledge/sources?concept=${encodeURIComponent(concept)}`);
+  if (!response.ok) throw new Error("获取知识点来源失败");
+  const data = (await response.json()) as { concept: string; sources: KnowledgeSourceLink[] };
+  return data.sources;
 }
