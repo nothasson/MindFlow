@@ -195,21 +195,28 @@ func (c *AIClient) ExtractKnowledgePoints(text string) (*ExtractResponse, error)
 	return &result, nil
 }
 
-// Health 检查 AI 服务健康状态
+// Health 检查 AI 服务健康状态（带重试）
 func (c *AIClient) Health() error {
-	req, err := http.NewRequest("GET", c.baseURL+"/health", nil)
-	if err != nil {
-		return err
+	var lastErr error
+	for i := 0; i < 3; i++ {
+		req, err := http.NewRequest("GET", c.baseURL+"/health", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("AI 服务不可达: %w", err)
+			time.Sleep(time.Duration(i+1) * time.Second)
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return nil
+		}
+		lastErr = fmt.Errorf("AI 服务健康检查失败: status %d", resp.StatusCode)
+		time.Sleep(time.Duration(i+1) * time.Second)
 	}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("AI 服务不可达: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("AI 服务健康检查失败: status %d", resp.StatusCode)
-	}
-	return nil
+	return lastErr
 }
 
 // --- 内部方法 ---

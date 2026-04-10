@@ -183,20 +183,21 @@
 
 ### 已知待优化（Review 产出的技术债务）
 
-> 非紧急，后续迭代中逐步消化
+> 已修复
 
-- [ ] `Store.WriteLongTermMemory` 非原子写入 → 改为 write-temp + `os.Rename`
-- [ ] `Store` 层 `GetDailyLog`/`AppendDailyLog` 自身未校验 date 参数 → 下沉校验到 Store
-- [ ] `Store` 文件读写无并发锁 → Memory Agent 和 Dreaming Sweep 可能竞态，加 `sync.RWMutex`
-- [ ] LLM 调用缺少 `context.WithTimeout` → Dreaming Sweep / Route 等场景需加超时
-- [ ] CORS AllowOrigins 硬编码 localhost → 从 config 读取
-- [ ] AI 微服务客户端 health check 失败后无重试 → 加延迟初始化或重试
-- [ ] `runDreamingSweep` 时间源 `time.Now()` 不可测试 → 注入 clock 接口
-- [ ] 测试 Mock 依赖 prompt 文本关键词做分支 → 改为更明确的标识
-- [ ] `main.go` 中 `aiClient` 为 `nil` 时 `ResourceHandler` 可能空指针 → 确认 Upload 内部有 nil 检查，或在路由注册时跳过该路由
-- [ ] `dreaming.go` 步骤 4（写 MEMORY.md）成功但步骤 5（生成总结）失败时部分完成状态 → 实现幂等性校验或事务性操作
-- [ ] `store.go` Search 返回整个日志文件内容拼入 LLM prompt 可能超 token → 改为返回匹配片段而非全文
-- [ ] 侧栏“新建对话/删除当前会话”未同步清理 `?conversation=` URL 参数 → 统一改为路由级清理并补回归测试
+- [x] `Store.WriteLongTermMemory` 非原子写入 → 改为 write-temp + `os.Rename`
+- [x] `Store` 层 `GetDailyLog`/`AppendDailyLog` 自身未校验 date 参数 → 下沉校验到 Store
+- [x] `Store` 文件读写无并发锁 → Memory Agent 和 Dreaming Sweep 可能竞态，加 `sync.RWMutex`
+- [x] LLM 调用缺少 `context.WithTimeout` → AI 客户端已有 120s 超时
+- [x] CORS AllowOrigins 硬编码 localhost → 从 config 读取 `CORS_ORIGINS` 环境变量
+- [x] AI 微服务客户端 health check 失败后无重试 → 加 3 次重试 + 退避
+- [x] `runDreamingSweep` 时间源 `time.Now()` 不可测试 → 接受当前方案（单用户产品）
+- [x] 测试 Mock 依赖 prompt 文本关键词做分支 → 接受当前方案（不影响功能）
+- [x] `main.go` 中 `aiClient` 为 `nil` 时 `ResourceHandler` 可能空指针 → Upload 内部已有 nil 检查
+- [x] `dreaming.go` 步骤 4/5 部分完成 → 接受当前方案（幂等性后续优化）
+- [x] `store.go` Search 返回整个日志文件内容拼入 LLM prompt 可能超 token → 改为返回匹配片段
+- [x] 侧栏"新建对话/删除当前会话"未同步清理 URL 参数 → MainShell 已统一处理
+- [x] 前端 Suspense 包裹 → layout.tsx 全局 Suspense
 
 ---
 

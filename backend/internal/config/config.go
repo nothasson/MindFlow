@@ -23,6 +23,9 @@ type Config struct {
 	MemoryDir     string
 	UploadDir     string
 	MigrationsDir string
+
+	// CORS
+	CORSOrigins string
 }
 
 func Load() *Config {
@@ -38,6 +41,7 @@ func Load() *Config {
 		MemoryDir:     getEnv("MEMORY_DIR", "/data/memory"),
 		UploadDir:     getEnv("UPLOAD_DIR", "/data/uploads"),
 		MigrationsDir: getEnv("MIGRATIONS_DIR", "./migrations"),
+		CORSOrigins:   getEnv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"),
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -104,9 +105,10 @@ func main() {
 	// 创建 Hertz 服务器
 	h := server.Default(server.WithHostPorts(":" + cfg.Port))
 
-	// CORS 中间件
+	// CORS 中间件（从配置读取允许的 origins）
+	corsOrigins := strings.Split(cfg.CORSOrigins, ",")
 	h.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://127.0.0.1:3000"},
+		AllowOrigins:     corsOrigins,
 		AllowMethods:     []string{"GET", "POST", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
