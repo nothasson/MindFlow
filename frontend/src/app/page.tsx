@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, startTransition } from "react";
+import { useCallback, useEffect, useRef, useState, startTransition } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -27,6 +27,16 @@ export default function Home() {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const requestedConversationId = searchParams?.get("conversation") ?? null;
+  const learnQuery = searchParams?.get("q") ?? null;
+
+  // 从知识图谱跳转过来时，自动发起学习对话
+  const learnQueryHandled = useRef(false);
+  useEffect(() => {
+    if (learnQuery && !learnQueryHandled.current && !isLoading && messages.length === 0) {
+      learnQueryHandled.current = true;
+      sendMessage(`我想学习「${learnQuery}」这个概念，请引导我理解`);
+    }
+  }, [learnQuery, isLoading, messages.length, sendMessage]);
 
   const refreshConversations = useCallback(async () => {
     try {

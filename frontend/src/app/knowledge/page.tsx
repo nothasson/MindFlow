@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MainShell } from "@/components/layout/MainShell";
 import { getKnowledgeGraph } from "@/lib/api";
 import type { KnowledgeNode, KnowledgeEdge } from "@/lib/types";
@@ -26,6 +27,7 @@ function confidenceLabel(confidence: number): string {
 }
 
 export default function KnowledgePage() {
+  const router = useRouter();
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
   const [edges, setEdges] = useState<KnowledgeEdge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -273,7 +275,7 @@ export default function KnowledgePage() {
               onClick={() => setSelected(n)}
             >
               <circle
-                r={Math.max(18, 12 + n.repetitions * 2)}
+                r={Math.max(28, 10 + n.concept.length * 5)}
                 fill={confidenceColor(n.confidence)}
                 fillOpacity={0.85}
                 stroke={selected?.id === n.id ? "#57534e" : "#EEECE2"}
@@ -282,12 +284,12 @@ export default function KnowledgePage() {
               <text
                 textAnchor="middle"
                 dy="0.35em"
-                fontSize={11}
+                fontSize={n.concept.length > 4 ? 10 : 12}
                 fill="white"
                 fontWeight={600}
                 style={{ pointerEvents: "none", userSelect: "none" }}
               >
-                {n.concept.length > 6 ? n.concept.slice(0, 5) + "..." : n.concept}
+                {n.concept.length > 5 ? n.concept.slice(0, 4) + "…" : n.concept}
               </text>
             </g>
           ))}
@@ -362,12 +364,13 @@ export default function KnowledgePage() {
               <p className="mt-0.5 text-stone-700">{selected.easiness_factor.toFixed(2)}</p>
             </div>
 
-            <a
-              href={`/?q=${encodeURIComponent(selected.concept)}`}
+            <button
+              type="button"
+              onClick={() => router.push(`/?q=${encodeURIComponent(selected.concept)}`)}
               className="mt-2 flex w-full items-center justify-center rounded-lg bg-[#C67A4A] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a]"
             >
               开始学习「{selected.concept}」
-            </a>
+            </button>
 
             {/* Related concepts */}
             {edges.filter((e) => e.from === selected.concept || e.to === selected.concept).length > 0 && (
