@@ -1,6 +1,6 @@
 # MindFlow 主进度文档
 
-> 最后更新：2026-04-09
+> 最后更新：2026-04-11
 > 本文档综合 mempalace 分析与现有设计文档，作为项目唯一的进度与 TODO 总表。
 
 ## 一、项目现状
@@ -10,14 +10,14 @@
 | 模块 | 完成内容 |
 |------|---------|
 | 基础设施 | Docker Compose 6 服务编排、生产/开发分离、volume 持久化 |
-| Go 后端 | Hertz HTTP 服务、TutorAgent 苏格拉底对话、POST /api/chat、配置模块 |
-| Python AI 微服务 | FastAPI 骨架、GET /health |
-| 前端 | claude.ai 风格三态界面、Markdown + Mermaid 渲染、Vitest 测试基础设施 |
-| 工程规范 | CODEBUDDY.md 规则（提交/重启/全链路/虚假数据/README 历史） |
+| Go 后端 | Hertz HTTP 服务、9 个 Agent 编排（Orchestrator/Tutor/Diagnostic/Memory/Content/Courseware/Quiz/Review/Curriculum）|
+| Python AI 微服务 | FastAPI 6 个接口、知识点向量化（Qdrant）|
+| 前端 | 10 个页面路由（聊天/资料/知识图谱/记忆/仪表盘/复习/测验/错题本/设置/课程详情）|
+| 工程规范 | CLAUDE.md/CODEBUDDY.md 规则、/review 隔离代码审查 |
 
 ### 当前模型
 
-硅基流动 SiliconFlow，`Pro/zai-org/GLM-5.1`
+硅基流动 SiliconFlow（默认），`Pro/zai-org/GLM-5.1`。可选 Codex（GPT-5.4），设置页热切换。
 
 ---
 
@@ -67,119 +67,84 @@
 > 目标：完整的苏格拉底对话闭环，会话可持久化
 
 - [x] **SSE 流式输出 + 打字机效果**
-  - 后端 POST /api/chat 改为 SSE（Server-Sent Events）流式响应
-  - Go 后端：逐 token 写入 `text/event-stream`，每个 chunk 一个 `data:` 事件
-  - 前端 useChat：用 `EventSource` 或 `fetch` + `ReadableStream` 接收
-  - MessageBubble：AI 回复逐字追加渲染，产生打字机效果
-  - 完成后仍保留完整消息用于 Markdown 渲染
-- [x] **会话持久化**
-  - PostgreSQL 建表：conversations、messages
-  - Go 后端：GET /api/conversations、GET /api/conversations/:id
-  - 前端侧栏接真实会话列表
-- [x] **Orchestrator Agent**
-  - 总调度器，根据上下文决定调 TutorAgent 还是其他 Agent
-  - 基于关键词规则路由，当前只有 Tutor 可用
+- [x] **会话持久化**（PostgreSQL conversations/messages 表）
+- [x] **Orchestrator Agent**（LLM 语义路由）
 - [ ] **E2E 测试**（延后，统一补）
-  - Playwright：用户发消息 → AI 引导式回复 → 刷新后会话仍在
 
 ### P1：资料理解
 
-> 目标：上传 PDF，AI 理解并基于内容教学
-
 - [x] Python AI 服务：文档解析（PyMuPDF）
-- [x] Python AI 服务：Embedding 生成（sentence-transformers）
+- [x] Python AI 服务：Embedding 生成
 - [x] Qdrant 向量存储接入
-- [x] Go AI 微服务 HTTP 客户端（service/ai_client.go）+ 单元测试
+- [x] Go AI 微服务 HTTP 客户端 + 单元测试
 - [x] Content Agent 集成到 Orchestrator（LLM 语义路由）
 - [x] 前端资料上传页面
 - [ ] E2E：上传 PDF → AI 基于内容提问
 
 ### P2：诊断和记忆
 
-> 目标：AI 能诊断错误、记住学生状态
-> 借鉴 mempalace 分层记忆和时间知识图谱
-
-- [x] **Diagnostic Agent**（TDD）
-  - 分析学生回答，分类错误类型（概念错/方法错/粗心）
-  - 输出诊断结构体，反馈给 Orchestrator
-- [x] **Memory Agent + 分层记忆系统**（TDD）
-  - L0 学生身份层（始终加载，~50 tokens）
-  - L1 关键掌握度层（始终加载，~150 tokens）
-  - L2 当前科目上下文（按需加载）
-  - L3 历史深度搜索（按需加载，走 Qdrant）
-  - Markdown 文件持久化：MEMORY.md + memory/YYYY-MM-DD.md
-- [x] **时间知识图谱**
-  - PostgreSQL 存储知识点掌握度三元组（学生、关系、概念、有效期、置信度）
-  - 支持历史查询和遗忘曲线衰减
+- [x] **Diagnostic Agent**（5+3 错误分类体系）
+- [x] **Memory Agent + 分层记忆系统**（L0-L3 四层）
+- [x] **时间知识图谱**（PostgreSQL 掌握度三元组 + 遗忘衰减）
 - [x] memory_search / memory_get / memory_write 工具函数
-- [x] Dreaming sweep 定时任务（短期记忆 → 长期画像）+ 每日凌晨 3 点自动执行
-- [x] 知识图谱可视化（前端 /knowledge 页面，颜色标注掌握度：绿/黄/红）
+- [x] Dreaming sweep 定时任务
+- [x] 知识图谱可视化（前端 /knowledge 页面）
 - [ ] E2E：跨 session 记忆连续性
 
 ### P3：出题和复习
 
-> 目标：自动出题 + 遗忘曲线复习
-
-- [x] SM-2 遗忘曲线算法（TDD）
-- [x] Quiz Agent：基于资料和掌握度自动出题
-- [x] Review Agent：遗忘曲线调度
-- [x] Curriculum Agent：AI 主动规划每次会话内容（复习优先于新内容）
-- [x] 复习计划日历（前端 /review 页面）
-- [x] 学习仪表盘（前端 /dashboard 页面）
+- [x] **FSRS 算法**（替代 SM-2，自适应间隔重复）
+- [x] **Quiz Agent**：Bloom 认知分类法出题 + 对话式考察 + Anki 卡片模式
+- [x] **Review Agent**：遗忘曲线调度 + 易混淆概念交错复习
+- [x] **Curriculum Agent**：AI 晨间简报 + 拓扑排序学习路径
+- [x] 复习计划日历 + 独立复习答题页面（FSRS 四按钮评分）
+- [x] 学习仪表盘（热力图 + 掌握度环形图 + 薄弱点行动按钮）
 - [ ] E2E：遗忘曲线提醒 → 复习 → 更新掌握度
 
-### P4：打磨和扩展
+### P4：优化功能（docs/plans/12-优化功能点技术实现方案.md）
 
-> 目标：产品化和可扩展性
+> P0 全部完成 ✅ | P1 全部完成 ✅ | P2 大部分完成
+
+**P0 — 必须做（7/7 ✅）**
+- [x] P0-1 FSRS 算法迁移（替换 SM-2）
+- [x] P0-2 苏格拉底对话 Prompt 升级（IARA/CARA/SER 框架）
+- [x] P0-3 错误诊断精细化（5+3 分类体系）
+- [x] P0-4 提示词注入防护（四层防御）
+- [x] P0-5 知识点提取 Prompt 升级（bloom_level/importance/多关系）
+- [x] P0-6 错题变式题系统（6 种变式类型）
+- [x] P0-7 错题自动收集 + 错题本页面
+
+**P1 — 重要（11/11 ✅）**
+- [x] P1-9 Bloom 分类法出题（6 级认知层级自动匹配）
+- [x] P1-10 AI 晨间简报（今日学习计划）
+- [x] P1-11 错误根源追踪（递归 CTE 前置知识链）
+- [x] P1-12 基于拓扑排序的学习路径生成（Kahn 算法）
+- [x] P1-13 学习仪表盘重设计（热力图 + 环形图）
+- [x] P1-14 源文件引用锚定
+- [x] P1-15 上传后自动概览（摘要 + 建议问题）
+- [x] P1-16 复习体验优化（独立答题页 + FSRS 四按钮）
+- [x] P1-17 考试模式（考试计划 + 加速复习）
+- [x] P1-18 分块提取 + 合并去重
+- [x] P1-19 对话式考察模式（AI 自主结束 + 综合评分）
+
+**P2 — 锦上添花（4/7）**
+- [x] P2-20 知识点向量化（Qdrant 语义搜索）
+- [x] P2-21 教学风格动态自适应（DetectTeachingLevel）
+- [ ] P2-22 多格式资料支持（docx/pptx/youtube — 待实现）
+- [x] P2-23 知识图谱交互增强（力模拟/节点筛选）
+- [x] P2-24 教学风格可选（设置页三种风格）
+- [x] P2-25 易混淆概念交错复习
+- [x] P2-26 资料全链路关联（knowledge_source_links 表）
+
+### P5：打磨和扩展
 
 - [x] **记忆页**（/memory）
-  - 学习画像概览（从 MEMORY.md 解析）
-  - 每日学习日志时间线（memory/YYYY-MM-DD.md）
-  - 精华总结（learnings/）
-  - 薄弱点追踪详情
-  - 记忆搜索
-  - 后端 API：GET /api/memory/profile、/timeline、/search、/weakpoints
 - [ ] 用户系统（注册登录）
 - [ ] 多用户数据隔离
 - [ ] LLM 评估体系（对话质量、诊断准确率）
-- [ ] MCP 工具集成（把记忆和教学能力暴露为 MCP 工具）
 - [ ] 性能优化（缓存、连接池、批量处理）
 - [ ] 移动端适配
-
-### P5：借鉴"今天学点啥"（秘塔科技）的创新方向
-
-> 参考产品：秘塔科技「今天学点啥」—— AI 活化知识应用
-> 核心理念：将任何文档转化为沉浸式互动课程，从"信息囤积"到"对话式内化"
-
-#### 5.1 沉浸式课件生成
-
-- [ ] **文档 → PPT 课件自动生成**：上传 PDF/文档后，LLM 自动提取核心知识点，生成结构化 PPT 课件（含 SVG 动画、逻辑图、流程图）
-- [ ] **语音讲解生成**：为每页 PPT 生成配套语音讲解（TTS），支持多种讲解风格（课堂、苏格拉底提问、故事模式等）
-- [ ] **章节拆分与选择性学习**：自动将长文档拆分为章节，用户可选择感兴趣的章节生成课程
-
-#### 5.2 个性化学习引擎增强
-
-- [x] **知识掌握度分级**：初学者/进阶者/专家三档，LLM 根据选择自动调整讲解深度和用词
-- [x] **多讲解风格**：扩展 TutorAgent 支持不同教学风格（严谨课堂、启发式提问、生活化比喻等），由 LLM 动态适配
-- [ ] **智能推荐系统**：基于学习历史、答题数据、掌握度推荐下一步学习内容（替代手动选择）
-
-#### 5.3 答题挑战与社交化
-
-- [ ] **课后自动出题闯关**：每节课程结束自动触发答题挑战，答对解锁成就
-- [ ] **答题 PK**：邀请好友进行知识 PK，增加竞争性和社交传播
-- [ ] **错题本与解析**：答错时 LLM 生成详细解析，自动收录到错题本，纳入遗忘曲线复习
-
-#### 5.4 学习内容多源输入
-
-- [ ] **URL 抓取学习**：粘贴网页链接（公众号文章、博客、论文）自动提取内容转为课程
-- [ ] **搜索即学习**：输入关键词，自动搜索相关资料并生成课程（结合 RAG）
-- [ ] **视频内容提取**：支持 B 站/YouTube 视频链接，提取字幕/内容转为结构化课程
-
-#### 5.5 学习成果可视化
-
-- [ ] **学习书架**：已完成课程存入书架，支持随时复习
-- [ ] **课程分享**：通过链接分享生成的课程给他人
-- [ ] **学习进度仪表盘增强**：整合课程完成率、答题正确率、知识图谱覆盖率
+- [ ] P2-22 多格式资料支持（docx/pptx/youtube）
 
 ### 已知待优化（Review 产出的技术债务）
 

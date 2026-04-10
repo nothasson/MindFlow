@@ -1,16 +1,37 @@
 # MindFlow
 
-> AI 驱动的苏格拉底式学习系统
+> AI 原生的苏格拉底式自适应学习系统
 
 MindFlow 不是问答机器人。它是一个**有记忆、会主动驱动学习节奏的 AI 私人导师**——解析你的资料、诊断你的掌握度、规划下一步、安排复习，并在多次会话中持续记忆你的学习状态。
 
 ---
 
+## 目录
+
+- [产品定位](#产品定位)
+- [功能全景](#功能全景)
+- [苏格拉底式对话](#苏格拉底式对话)
+- [多 Agent 系统](#多-agent-系统)
+- [三层记忆系统](#三层记忆系统)
+- [FSRS 自适应复习](#fsrs-自适应复习)
+- [三模式测验](#三模式测验)
+- [知识图谱](#知识图谱)
+- [错题本与变式题](#错题本与变式题)
+- [AI 晨间简报](#ai-晨间简报)
+- [考试模式](#考试模式)
+- [资料理解与课程生成](#资料理解与课程生成)
+- [学习仪表盘](#学习仪表盘)
+- [系统架构](#系统架构)
+- [技术栈](#技术栈)
+- [快速开始](#快速开始)
+- [项目结构](#项目结构)
+- [更新历史](#更新历史)
+
+---
+
 ## 产品定位
 
-### 为什么做这个
-
-传统 AI 学习工具的问题：
+传统 AI 学习工具的三大问题：
 - **没有记忆**：每次对话从头开始，不知道你昨天学了什么
 - **直接给答案**：学生没有思考过程，知识停留在表面
 - **被动等提问**：不会主动安排复习，不会告诉你该学什么
@@ -18,296 +39,299 @@ MindFlow 不是问答机器人。它是一个**有记忆、会主动驱动学习
 MindFlow 的解法：
 - **苏格拉底式教学**：AI 绝不直接给答案，通过提问引导你自己推导
 - **三层记忆系统**：跨会话记住你的掌握度、薄弱点和学习偏好
-- **主动驱动**：基于遗忘曲线自动安排复习，AI 决定今天学什么
+- **AI 主动驱动**：基于遗忘曲线自动安排复习，AI 决定今天学什么
 
-### 核心设计原则
-
-1. **AI Native** — AI 不是附加功能，是产品的核心交互方式
-2. **不给答案** — 苏格拉底式引导，让学生自己推导
-3. **有记忆** — 跨会话记住学生的一切学习状态
-4. **AI 主动驱动** — AI 决定今天学什么、复习什么
+核心设计原则：**AI Native**（AI 是产品核心）、**不给答案**、**有记忆**、**AI 主动驱动**、**本地优先**。
 
 ---
 
-## 核心能力
+## 功能全景
 
-| 能力 | 说明 |
-|------|------|
-| 苏格拉底式对话 | 3 种风格（追问/讲解/比喻）× 3 档难度（初学/进阶/专家），动态组装 Prompt |
-| 资料理解 | PDF/TXT/URL 上传，PyMuPDF 解析、向量化存储 Qdrant、自动提取知识点 |
-| 知识图谱 | 自动构建知识点关系，前端可视化，颜色标注掌握度（绿/黄/红） |
-| 遗忘曲线 | SM-2 算法自动计算复习间隔，到期自动提醒 |
-| 三层记忆 | L0 身份层 + L1 掌握度层 + L2 科目上下文 + L3 深度搜索，Markdown 持久化 |
-| Dreaming Sweep | 每日凌晨 3 点自动整理短期记忆，提炼到长期学习画像 |
-| 章节化课程 | 资料自动转化为结构化课程，按章节学习 |
-| SSE 流式输出 | 打字机效果 + 增量 Markdown/Mermaid 渲染 |
+| 模块 | 功能 | 状态 |
+|------|------|------|
+| 苏格拉底对话 | 3 种教学风格 × 3 档难度，IARA/CARA/SER 教学框架 | ✅ |
+| 多 Agent 编排 | 9 个专职 Agent，LLM 语义路由 | ✅ |
+| 三层记忆 | L0-L3 分层加载 + Dreaming Sweep 每日提炼 | ✅ |
+| FSRS 复习 | 替代 SM-2，自适应间隔重复，4 级评分 | ✅ |
+| 三模式测验 | 题目测验 / Anki 卡片 / 对话考察 | ✅ |
+| 知识图谱 | 自动构建 + 力导向可视化 + 来源追溯 | ✅ |
+| 错题本 | 8 种错误分类 + 6 种变式题训练 | ✅ |
+| 晨间简报 | 首页 AI 今日学习建议 | ✅ |
+| 考试模式 | 考试计划 + 关联知识点 + 加速复习 | ✅ |
+| 资料理解 | PDF/TXT/URL 解析 + 向量检索 + 自动概览 | ✅ |
+| 章节课程 | 资料自动转结构化课程 | ✅ |
+| 学习仪表盘 | 热力图 + 掌握度分布 + 薄弱点行动 | ✅ |
+| 知识点向量化 | Qdrant 语义搜索 + 易混淆检测 | ✅ |
+| 提示词防护 | 四层注入防御 | ✅ |
 
 ---
 
-## 系统架构
+## 苏格拉底式对话
 
-```mermaid
-graph TB
-    subgraph Frontend["前端 (Next.js 16)"]
-        UI[7 个页面路由]
-        SSE[SSE 流式接收]
-        MD[Markdown + Mermaid 渲染]
-    end
+MindFlow 的核心教学方式。AI **绝不直接给答案**，而是通过一系列精心设计的教学框架引导学生自己推导。
 
-    subgraph Backend["Go 后端 (Hertz + Eino)"]
-        Orch[Orchestrator<br/>总调度器]
-        Tutor[Tutor Agent<br/>苏格拉底教学]
-        Diag[Diagnostic Agent<br/>错误诊断]
-        Mem[Memory Agent<br/>学习画像]
-        Content[Content Agent<br/>资料检索 RAG]
-        Course[Courseware Agent<br/>课程生成]
-        Quiz[Quiz Agent<br/>自动出题]
-        Review[Review Agent<br/>复习调度]
-        Curri[Curriculum Agent<br/>学习规划]
-    end
+### 三大教学框架
 
-    subgraph AI["Python AI 微服务 (FastAPI)"]
-        Parse[文档解析<br/>PyMuPDF]
-        Embed[Embedding<br/>向量生成]
-        Search[向量搜索]
-        Extract[知识点提取]
-    end
+**IARA（推理引导）** — 当学生提问时：
+1. **Identify**：确认学生当前理解水平（"你目前对X的理解是什么？"）
+2. **Ask**：提出引导性问题（"如果Y成立，那Z会怎样？"）
+3. **Reflect**：让学生反思推理（"你为什么这样认为？"）
+4. **Advance**：推导正确后推进下一步
 
-    subgraph Data["数据层"]
-        PG[(PostgreSQL 16<br/>会话/课程/知识图谱)]
-        QD[(Qdrant<br/>向量存储)]
-        Redis[(Redis 7<br/>缓存)]
-        Files[("Markdown 文件<br/>记忆系统")]
-    end
+**CARA（纠错引导）** — 当学生答错时：
+1. **Catch**：识别错误但不直说（"让我们验证一下"）
+2. **Ask counter**：提出反例（"按你的理解，这个例子会怎样？"）
+3. **Redirect**：引导回正确方向
+4. **Affirm**：学生纠正后肯定
 
-    UI -->|SSE| Orch
-    Orch --> Tutor & Diag & Mem & Content & Course & Quiz & Review & Curri
-    Content -->|HTTP| Parse & Embed & Search & Extract
-    Orch --> PG
-    AI --> QD
-    Mem --> Files
-```
+**SER（脚手架策略）** — 动态调整支持力度：
+- 卡住 1-2 轮 → 概念性提示
+- 卡住 3-4 轮 → 方法性提示
+- 卡住 5+ 轮 → 降低难度，拆分子问题
+- 连续 3 题正确 → 提高难度或推进
+
+### 三种教学风格
+
+在设置页可切换：
+- **苏格拉底式**（默认）：引导提问，从不直接告知
+- **深入原理**：从底层原理讲起，适合理工科
+- **通俗比喻**：用生活比喻解释抽象概念
+
+教学难度根据学生表现**自动适应**：错误率 > 60% 自动降为初学模式，错误率 < 20% 自动升为专家模式。
 
 ---
 
 ## 多 Agent 系统
 
-MindFlow 采用 Eino 框架编排多 Agent 协作，Orchestrator 作为总调度器根据语义意图路由到对应 Agent。
+基于 **Eino** 框架编排 9 个专职 Agent，Orchestrator 通过 LLM 语义路由（非关键词匹配）将用户消息分发到最合适的 Agent。
 
-| Agent | 职责 | 触发条件 |
-|-------|------|---------|
-| **Orchestrator** | 总调度器，LLM 语义路由决策 | 每次用户消息 |
-| **Tutor Agent** | 苏格拉底式教学对话，绝不直接给答案 | 默认路由，学习提问 |
-| **Diagnostic Agent** | 分析学生回答，判断错误类型（概念错/方法错/粗心） | 学生给出明确答案时 |
-| **Memory Agent** | 维护学生画像：掌握度、薄弱点、学习偏好 | 每次对话自动记录 |
-| **Content Agent** | 基于上传资料的 RAG 检索教学 | 提到资料/文档内容时 |
-| **Courseware Agent** | 将资料转化为结构化章节课程 | 生成课程时 |
-| **Quiz Agent** | 基于资料和掌握度自动出题 | 要求测试时 |
-| **Review Agent** | SM-2 遗忘曲线复习调度 | 复习相关 |
-| **Curriculum Agent** | AI 主动规划学习内容 | 问"接下来学什么" |
+| Agent | 职责 |
+|-------|------|
+| **Orchestrator** | 总调度器，LLM 分析用户意图后路由 |
+| **Tutor Agent** | 苏格拉底式教学，绝不直接给答案 |
+| **Diagnostic Agent** | 分析回答，8 种错误分类（5 基础 + 3 元认知）|
+| **Memory Agent** | 维护学生画像：掌握度、薄弱点、偏好 |
+| **Content Agent** | 基于上传资料的 RAG 检索教学，支持引用标注 |
+| **Courseware Agent** | 将资料转化为结构化章节课程 |
+| **Quiz Agent** | Bloom 分层出题 + 对话考察 + Anki 卡片 |
+| **Review Agent** | FSRS 复习调度 + 易混淆交错排列 |
+| **Curriculum Agent** | AI 晨间简报 + 拓扑排序学习路径 |
 
-### Orchestrator 路由决策
-
-```go
-// backend/internal/agent/orchestrator.go
-const OrchestratorSystemPrompt = `你是 MindFlow 的教学调度器。
-根据学生消息的意图，输出 JSON 格式的调度决策：
-{
-  "agent": "tutor",
-  "reason": "学生在提问，需要苏格拉底式引导"
-}
-
-可用的 agent 类型：
-- "tutor": 苏格拉底式教学对话（默认）
-- "diagnostic": 诊断学生回答的错误类型
-- "quiz": 出题测验
-- "curriculum": 学习规划
-- "content": 基于资料内容教学`
-```
+所有需要理解语义的判断（路由、意图识别、内容分类）都交给 LLM 决策，严禁 if/switch + 关键词匹配。
 
 ---
 
-## 对话流程
+## 三层记忆系统
 
-```mermaid
-sequenceDiagram
-    participant U as 学生
-    participant F as 前端
-    participant O as Orchestrator
-    participant T as Tutor Agent
-    participant M as Memory Agent
+借鉴 MemPalace 设计，MindFlow 拥有跨会话的持久记忆能力：
 
-    U->>F: 输入问题
-    F->>O: POST /api/chat (SSE)
-    O->>O: LLM 语义路由决策
-    O->>T: 转发给 Tutor Agent
-    T->>T: 组装 System Prompt<br/>(风格+难度+记忆上下文)
-    T-->>F: SSE 逐 token 流式回复
-    F->>F: 增量 Markdown 渲染<br/>打字机效果
-    O->>M: 记录学习日志到 memory/
-```
+| 层级 | 内容 | Token 预算 | 加载时机 |
+|------|------|-----------|---------|
+| L0 | 学生身份（姓名、偏好、风格） | ~50 | 始终加载 |
+| L1 | 掌握度摘要（已掌握/薄弱 Top 10） | ~150 | 始终加载 |
+| L2 | 当前科目/概念上下文 | 按需 | 进入学习主题时 |
+| L3 | 历史对话向量深度搜索 | 按需 | 诊断/复习时 |
 
----
+### 记忆持久化
 
-## 记忆系统
+- **MEMORY.md** — 长期学习画像（核心摘要）
+- **memory/YYYY-MM-DD.md** — 每日学习日志
+- **learnings/YYYY-MM-DD.md** — 精华总结
 
-借鉴 MemPalace 设计，采用分层记忆架构：
+### Dreaming Sweep
 
-```mermaid
-graph LR
-    subgraph L0["L0 身份层 (~50 tokens)"]
-        ID[学习偏好/风格]
-    end
-    subgraph L1["L1 掌握度层 (~150 tokens)"]
-        Master[已掌握 Top 10<br/>薄弱点 Top 10]
-    end
-    subgraph L2["L2 科目上下文 (按需)"]
-        Subject[当前学习主题<br/>相关知识点]
-    end
-    subgraph L3["L3 深度搜索 (按需)"]
-        Deep[历史对话检索<br/>向量搜索]
-    end
-
-    L0 -->|始终加载| Session[每次会话]
-    L1 -->|始终加载| Session
-    L2 -->|进入主题时| Session
-    L3 -->|诊断/复习时| Session
-
-    Session -->|对话结束| DailyLog[每日日志<br/>memory/YYYY-MM-DD.md]
-    DailyLog -->|凌晨 3 点| Sweep[Dreaming Sweep]
-    Sweep -->|提炼| MEMORY[MEMORY.md<br/>长期学习画像]
-```
-
-### 记忆文件结构
-
-```
-/data/memory/
-├── MEMORY.md              # 长期记忆（核心学习画像）
-├── memory/                # 每日学习日志
-│   ├── 2026-04-09.md
-│   └── 2026-04-08.md
-└── learnings/             # 精华总结（Dreaming Sweep 产出）
-    └── 2026-04-09.md
-```
-
-### Dreaming Sweep 流程
-
-每日凌晨 3 点自动执行：
-
-```mermaid
-graph TD
-    A[读取昨日日志<br/>memory/YYYY-MM-DD.md] --> B[读取当前<br/>MEMORY.md]
-    B --> C[LLM 分析提炼]
-    C --> D{有价值内容?}
-    D -->|是| E[更新 MEMORY.md<br/>新掌握/新薄弱点]
-    D -->|是| F[生成精华总结<br/>learnings/YYYY-MM-DD.md]
-    D -->|否| G[跳过]
-    E --> H[原子写入<br/>write-temp + rename]
-```
+每日凌晨 3 点自动执行：读取昨日日志 → LLM 分析提炼 → 更新 MEMORY.md → 生成精华总结。采用原子写入（write-temp + rename）和并发锁防止竞态。
 
 ---
 
-## 遗忘曲线 SM-2 算法
+## FSRS 自适应复习
 
-```mermaid
-graph TD
-    A[学习新概念] --> B{复习评分 0-5}
-    B -->|5 完美| C[间隔 × EF]
-    B -->|4 犹豫正确| D[间隔 × EF × 0.9]
-    B -->|3 困难正确| E[间隔 × EF × 0.8]
-    B -->|≤2 错误| F[重置为 1 天<br/>降低 EF]
-    C --> G[更新 next_review]
-    D --> G
-    E --> G
-    F --> G
-    G --> H{到期?}
-    H -->|是| B
-    H -->|否| I[继续学新内容]
-```
+使用 **FSRS v4 算法**（替代 SM-2），基于 21 个可优化权重，根据个人历史数据自适应调整复习间隔。
 
-### SM-2 评分标准
+### 四级评分
 
-| 分数 | 含义 | 间隔变化 |
-|------|------|---------|
-| 5 | 完美回忆 | 间隔 × EF |
-| 4 | 犹豫但正确 | 间隔 × EF × 0.9 |
-| 3 | 困难但正确 | 间隔 × EF × 0.8 |
-| 2 | 错误但接近 | 重置为 1 天 |
-| 1 | 错误且偏差大 | 重置为 1 天，降低 EF |
-| 0 | 完全忘记 | 重置为 1 天，大幅降低 EF |
+| 按钮 | 含义 | 对掌握度的影响 |
+|------|------|-------------|
+| 重来（Again） | 完全忘记 | 重置间隔，大幅降低稳定性 |
+| 困难（Hard） | 勉强想起 | 轻微增加间隔 |
+| 良好（Good） | 正常回忆 | 正常增加间隔 |
+| 轻松（Easy） | 非常简单 | 大幅增加间隔 |
+
+### 易混淆交错复习
+
+复习队列不再简单按时间排序。系统自动查询知识图谱中的 `similar` 关系，将易混淆概念交错排列（如"速度"和"加速度"相邻出现），强化区分记忆。
+
+### 拓扑排序学习路径
+
+基于知识图谱的 `prerequisite` 关系，使用 Kahn 拓扑排序算法生成学习路径，确保先学前置知识再学进阶内容。
 
 ---
 
-## 数据库设计
+## 三模式测验
 
-```mermaid
-erDiagram
-    conversations ||--o{ messages : has
-    conversations {
-        uuid id PK
-        varchar title
-        timestamp created_at
-        timestamp updated_at
-    }
-    messages {
-        uuid id PK
-        uuid conversation_id FK
-        varchar role
-        text content
-        timestamp created_at
-    }
-    resources ||--o{ courses : generates
-    resources {
-        uuid id PK
-        varchar source_type
-        varchar title
-        text content_text
-        int pages
-        varchar status
-    }
-    courses ||--o{ course_sections : contains
-    courses {
-        uuid id PK
-        uuid resource_id FK
-        varchar title
-        varchar difficulty_level
-        varchar style
-    }
-    course_sections {
-        uuid id PK
-        uuid course_id FK
-        varchar title
-        text content
-        int order_index
-    }
-    knowledge_mastery {
-        uuid id PK
-        varchar concept
-        float confidence
-        float easiness_factor
-        int interval_days
-        timestamp next_review
-    }
-    knowledge_relations {
-        uuid id PK
-        varchar from_concept
-        varchar relation_type
-        varchar to_concept
-    }
-    quiz_attempts ||--o{ wrong_book : has
-    quiz_attempts {
-        uuid id PK
-        uuid course_id FK
-        text question
-        text user_answer
-        boolean is_correct
-    }
-    wrong_book {
-        uuid id PK
-        uuid quiz_attempt_id FK
-        varchar concept
-        varchar error_type
-    }
+测验页提供三种模式，适配不同学习场景：
+
+### 📝 题目测验
+
+AI 根据 **Bloom 认知分类法** 自动匹配出题层级：
+
+| 掌握度 | 出题层级 | 题目类型 |
+|--------|---------|---------|
+| < 30% | 记忆 | 定义、识别 |
+| 30-50% | 理解 | 解释、比较 |
+| 50-70% | 应用 | 实际问题求解 |
+| 70-85% | 分析 | 推理、归因 |
+| 85-95% | 评价 | 判断、评估 |
+| > 95% | 创造 | 设计、综合 |
+
+提交答案后 AI 给出**分数 + 详细解析**，自动更新 FSRS 掌握度。
+
+### 🃏 Anki 卡片
+
+快速翻卡复习模式：
+1. 展示题目正面（问题）
+2. 点击翻转查看参考答案
+3. 自评：重来 / 困难 / 良好 / 轻松
+4. 评分直接更新 FSRS 掌握度
+
+### 💬 对话考察
+
+AI 通过多轮对话深入考察理解程度：
+- 从开放性问题入手 → 追问"为什么" → 提出反例 → 请学生总结
+- AI **自主判断何时考察充分**（非硬编码轮次），输出综合评分
+- 考察完成自动更新掌握度
+
+---
+
+## 知识图谱
+
+上传资料后，AI 自动提取知识点并构建关系图谱。
+
+### 知识点提取
+
+每个知识点包含：
+- **Bloom 认知层级**（remember → create）
+- **重要度**（0-1）
+- **粒度等级**（L1 学科 → L4 细节）
+- **多种关系**：prerequisite / similar / application / part_of / causal
+
+### 可视化
+
+前端力导向图实时渲染：
+- 节点颜色 = 掌握度（绿 > 0.7 / 黄 0.3-0.7 / 红 < 0.3）
+- 点击节点展示详情面板 + **来源追溯**（从哪份资料提取、哪些测验涉及）
+
+### 错误根源追踪
+
+当某知识点薄弱时，系统通过 PostgreSQL 递归 CTE 沿 prerequisite 关系向上追踪，找出根源性的薄弱前置知识。
+
+### 语义搜索
+
+知识点的 concept + description 存入 Qdrant 向量库，支持：
+- 用自然语言搜索知识点（"我想学微积分"）
+- 自动检测易混淆概念（高相似度 + 不同含义）
+
+---
+
+## 错题本与变式题
+
+### 错题自动收集
+
+三个触发点自动写入错题本：
+1. **测验答错** — QuizHandler 评分 < 3
+2. **对话诊断** — Diagnostic Agent 判定 wrong/partial
+3. **复习答错** — FSRS 评分 Again
+
+### 8 种错误分类
+
+| 类型 | 代码 | 说明 |
+|------|------|------|
+| 知识遗漏 | knowledge_gap | 缺少必要前置知识 |
+| 概念混淆 | concept_confusion | 混淆相似概念 |
+| 概念错误 | concept_error | 根本性误解 |
+| 方法错误 | method_error | 解法/步骤有误 |
+| 计算错误 | calculation_error | 理解对但算错 |
+| 过度自信 | overconfidence | 对错误答案很确定 |
+| 策略错误 | strategy_error | 选错解题策略 |
+| 表述不清 | unclear_expression | 思路可能对但表达混乱 |
+
+### 6 种变式题
+
+根据错误类型自动匹配变式策略：
+- **参数变换** — 换数字（适合计算错误）
+- **情境变换** — 换场景（适合概念错误）
+- **角度变换** — 换切入角度（适合方法错误）
+- **反向出题** — 已知结果求条件（适合概念混淆）
+- **简化变式** — 降低难度（适合连续答错）
+- **综合变式** — 组合多知识点（适合过度自信）
+
+---
+
+## AI 晨间简报
+
+首页打开时，AI 自动生成**今日学习建议**：
+
+- **待复习** — 到期的知识点，按紧急度排序
+- **建议新学** — 基于知识图谱拓扑顺序推荐的下一步
+- **测验巩固** — 最薄弱的知识点，建议做测验
+
+简报默认收起为一行胶囊按钮，点击展开为标签云，每个标签可一键跳转到对应功能。
+
+---
+
+## 考试模式
+
+在设置页创建考试计划：
+- 输入考试名称、日期
+- 选择关联知识点（从知识图谱获取）
+- 系统自动将相关知识点的复习频率乘以加速倍数（默认 1.5x）
+- 仪表盘展示考试倒计时
+
+---
+
+## 资料理解与课程生成
+
+### 资料上传
+
+支持 PDF、纯文本、URL 三种格式。上传后自动执行：
+1. **文档解析** — PyMuPDF 提取文本
+2. **向量化** — 生成 Embedding 存入 Qdrant
+3. **知识点提取** — LLM 提取知识点（含 Bloom 层级、关系）
+4. **自动概览** — LLM 生成 200 字摘要 + 3-5 个建议学习问题
+5. **知识点向量化** — 每个知识点存入 Qdrant 独立 collection
+
+长文本（> 6000 字）自动按章节分块提取，最后合并去重。
+
+### 课程生成
+
+资料可转化为结构化章节课程，支持按章节逐步学习。
+
+### 源文件引用
+
+Content Agent 在教学中引用资料时会标注来源（如 `【资料名:第3段】`），方便学生回溯原文。
+
+---
+
+## 学习仪表盘
+
+`/dashboard` 页面提供全方位学习数据：
+
+- **365 天学习热力图** — GitHub 贡献图风格，一眼看出学习习惯
+- **掌握度环形图** — 已掌握/学习中/薄弱 三档分布
+- **连续学习天数** — 徽章激励（🔥 7天 / 💎 30天）
+- **薄弱 Top 5** — 每个知识点带行动按钮（复习/出题/错题）
+- **统计卡片** — 总知识点、总对话、总测验等
+
+---
+
+## 系统架构
+
+三服务架构，共享数据层：
+
+```
+前端 (Next.js 16) ──SSE/REST──> Go 后端 (Hertz + Eino 9 Agents) ──HTTP──> Python AI 微服务 (FastAPI)
+                                          │                                        │
+                                          └──── PostgreSQL / Redis / Markdown ─────┘── Qdrant (向量)
 ```
 
 ---
@@ -319,10 +343,10 @@ erDiagram
 | 前端 | TypeScript, Next.js 16, React 19, Tailwind CSS 4 |
 | 后端 | Go 1.26, Eino（Agent 编排）, Hertz（HTTP/SSE）, pgx |
 | AI 微服务 | Python 3.11, FastAPI, PyMuPDF, Qdrant Client |
-| LLM | 硅基流动 SiliconFlow / OpenAI Codex (GPT-5.4)，设置页热切换 |
-| 数据库 | PostgreSQL 16（8 张表）, Qdrant（向量）, Redis 7 |
-| 测试 | Go testing, Vitest |
-| 部署 | Docker Compose（6 服务编排） |
+| LLM | 硅基流动 SiliconFlow（默认）/ Codex GPT-5.4（可选），设置页热切换 |
+| 数据库 | PostgreSQL 16（12 张表）, Qdrant（向量）, Redis 7 |
+| 算法 | FSRS v4（间隔重复）, Kahn（拓扑排序）, Bloom（认知分层）|
+| 部署 | Docker Compose（6 服务编排）|
 
 ---
 
@@ -332,7 +356,6 @@ erDiagram
 
 - [Docker](https://www.docker.com/) 和 Docker Compose
 - LLM API Key（[硅基流动](https://siliconflow.cn/) 或其他 OpenAI 兼容服务）
-- （可选）OpenAI Codex CLI 已登录（`codex login`），用于 Codex Provider
 
 ### 一键部署
 
@@ -342,24 +365,15 @@ cd MindFlow
 cp .env.example .env
 # 编辑 .env，填入 LLM_API_KEY
 
-# （可选）如果要用 Codex Provider，确保已运行 codex login
-
-# 部署模式：只加载主 compose 文件，不挂载本地源码
 docker compose -f docker-compose.yml up -d
 
-# 访问
-# 前端：http://localhost:3000
-# 后端：http://localhost:8080
-# AI 服务：http://localhost:8000
+# 访问 http://localhost:3000
 ```
 
 ### 本地开发
 
-> **注意：本地开发不要使用 `docker compose -f docker-compose.yml up -d`。**
-> 该命令会绕过 `docker-compose.override.yml`，导致源码目录不会挂载进容器，改代码后不会热更新，容易误以为“代码没有同步到 Docker”。
-
 ```bash
-# 开发模式（自动加载 docker-compose.override.yml，源码挂载 + HMR 热重载）
+# 开发模式（源码挂载 + HMR 热重载）
 docker compose up -d
 
 # 查看日志
@@ -387,59 +401,30 @@ docker compose up -d --build backend
 ```
 MindFlow/
 ├── backend/                          # Go 后端
-│   ├── cmd/server/main.go            # 入口（路由注册 + 服务初始化 + Dreaming Sweep）
+│   ├── cmd/server/main.go            # 入口
 │   ├── internal/
-│   │   ├── agent/                    # 9 个 Agent
-│   │   │   ├── orchestrator.go       # 总调度器（LLM 语义路由）
-│   │   │   ├── tutor.go              # 苏格拉底教学（3风格×3难度）
-│   │   │   ├── diagnostic.go         # 错误诊断
-│   │   │   ├── memory_agent.go       # 记忆管理
-│   │   │   ├── content.go            # 资料 RAG
-│   │   │   ├── courseware.go         # 课程生成
-│   │   │   ├── quiz.go               # 自动出题
-│   │   │   ├── review.go             # 复习调度
-│   │   │   └── curriculum.go         # 学习规划
-│   │   ├── handler/                  # HTTP 处理器
-│   │   │   ├── chat.go               # POST /api/chat（SSE 流式）
-│   │   │   ├── conversation.go       # 会话 CRUD
-│   │   │   ├── resource.go           # 资料上传
-│   │   │   ├── knowledge.go          # 知识图谱
-│   │   │   ├── memory.go             # 记忆 API
-│   │   │   ├── course.go             # 课程管理
-│   │   │   ├── dashboard.go          # 仪表盘统计
-│   │   │   └── review_handler.go     # 复习计划
-│   │   ├── memory/                   # 三层记忆系统
-│   │   │   ├── store.go              # 文件存储（原子写入 + 并发锁）
-│   │   │   └── dreaming.go           # Dreaming Sweep
-│   │   ├── review/                   # SM-2 遗忘曲线
-│   │   │   └── sm2.go                # 算法实现
+│   │   ├── agent/                    # 9 个 Agent + 注入防护
+│   │   ├── handler/                  # 15+ HTTP 处理器
+│   │   ├── memory/                   # 三层记忆 + Dreaming Sweep
+│   │   ├── review/                   # FSRS 算法
+│   │   ├── knowledge/                # 拓扑排序
 │   │   ├── repository/               # 数据库访问
 │   │   ├── service/                  # AI 微服务客户端
 │   │   ├── model/                    # 数据模型
-│   │   ├── config/                   # 配置加载
-│   │   └── llm/                      # LLM 客户端
-│   │       ├── client.go              # 硅基流动 OpenAI 兼容客户端
-│   │       ├── codex.go               # Codex OAuth Provider（ChatGPT Responses API）
-│   │       └── switch.go              # ModelSwitch 热切换代理
-│   └── migrations/                   # 6 个数据库迁移
+│   │   └── llm/                      # LLM 客户端（硅基流动 + Codex）
+│   └── migrations/                   # 12 个数据库迁移
 ├── ai-service/                       # Python AI 微服务
 │   ├── app/
 │   │   ├── main.py                   # FastAPI 入口
-│   │   ├── routers/                  # 6 个接口
-│   │   │   ├── parse.py              # POST /parse（PDF/TXT 解析）
-│   │   │   ├── url.py                # POST /url（URL 内容抓取）
-│   │   │   ├── embed.py              # POST /embed（向量生成）
-│   │   │   ├── upsert.py             # POST /upsert（向量入库）
-│   │   │   ├── search.py             # POST /search（向量检索）
-│   │   │   └── extract.py            # POST /extract（知识点提取）
-│   │   └── services/                 # 业务逻辑
+│   │   ├── routers/                  # 8 个 API 路由
+│   │   └── services/                 # 业务逻辑（解析/embedding/提取/向量化）
 │   └── tests/
 ├── frontend/                         # Next.js 前端
 │   └── src/
-│       ├── app/                      # 8 个页面（含设置页）
+│       ├── app/                      # 10+ 页面路由
 │       ├── components/               # UI 组件
 │       ├── hooks/                    # useChat 等
-│       └── lib/                      # API 客户端、类型
+│       └── lib/                      # API 客户端、类型定义
 ├── docs/plans/                       # 设计文档
 ├── docker-compose.yml                # Docker 编排
 └── .env.example
@@ -447,94 +432,18 @@ MindFlow/
 
 ---
 
-## 前端页面路由
+## 更新历史
 
-| 路由 | 功能 | 数据来源 |
-|------|------|---------|
-| `/` | 主对话（SSE 流式 + Markdown/Mermaid 渲染） | POST /api/chat |
-| `/resources` | 资料库（PDF/TXT/URL 上传） | POST /api/resources/upload |
-| `/knowledge` | 知识图谱可视化（颜色标注掌握度） | GET /api/knowledge/graph |
-| `/memory` | 学习记忆（画像/时间线/搜索） | GET /api/memory/* |
-| `/dashboard` | 学习仪表盘 | GET /api/dashboard/stats |
-| `/review` | 复习日历 | GET /api/review/due |
-| `/courses/[id]` | 课程详情 | GET /api/courses/:id |
-| `/settings` | 系统设置（LLM Provider 切换） | GET/PUT /api/settings/provider |
-
----
-
-## 环境变量
-
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `LLM_API_KEY` | LLM API Key | （必填） |
-| `LLM_BASE_URL` | LLM API 地址 | `https://api.siliconflow.cn/v1` |
-| `LLM_MODEL` | 模型名 | `Pro/MiniMaxAI/MiniMax-M2.5` |
-| `CODEX_MODEL` | Codex 模型名 | `gpt-5.4` |
-| `CORS_ORIGINS` | 允许的前端来源列表（逗号分隔） | `http://localhost:3000,http://127.0.0.1:3000` |
-| `POSTGRES_USER` | PostgreSQL 用户名 | `mindflow` |
-| `POSTGRES_PASSWORD` | PostgreSQL 密码 | `mindflow_dev` |
-| `POSTGRES_DB` | PostgreSQL 数据库名 | `mindflow` |
-| `BACKEND_PORT` | 后端端口 | `8080` |
-| `FRONTEND_PORT` | 前端端口 | `3000` |
-| `AI_SERVICE_PORT` | AI 服务端口 | `8000` |
-
----
-
-## 设计决策
-
-| 决策 | 原因 |
-|------|------|
-| Go + Eino 做 Agent | Eino 原生支持 ChatModel + Stream |
-| Python 做 AI 微服务 | AI/ML 生态最好，PDF 解析和 Embedding 不在 Go 里重造 |
-| SSE 而非 WebSocket | 单向流式够用，实现更简单，兼容性更好 |
-| pgx 而非 ORM | 直接 SQL，无魔法，易调试 |
-| Markdown 记忆文件 | 人类可读，git 友好，借鉴 MemPalace |
-| 原子写入 + 并发锁 | 防止 Memory Agent 和 Dreaming Sweep 竞态写坏文件 |
-| LLM 语义路由 | 关键词规则不够灵活，让 LLM 判断用户意图更准 |
-| docker-compose 分离 | 开发挂载源码 HMR，部署走镜像构建 |
-| CORS 来源可配置 | 默认允许本地前端地址，也可通过 `CORS_ORIGINS` 覆盖 |
-
----
-
-## API 接口
-
-### 对话
-
-```bash
-# 流式对话
-curl -X POST http://localhost:8080/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "什么是特征值？"}],
-    "stream": true,
-    "style": "socratic",
-    "level": "beginner"
-  }'
-```
-
-### 资料上传
-
-```bash
-# 上传 PDF
-curl -X POST http://localhost:8080/api/resources/upload \
-  -F "file=@lecture.pdf"
-
-# 导入 URL
-curl -X POST http://localhost:8080/api/resources/import-url \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/article"}'
-```
-
----
-
-## 开发规范
-
-详见 [CODEBUDDY.md](./CODEBUDDY.md)
-
-核心规则：
-1. **提交前必须验证**：`go build`、`go test`、`npm run build`、`npm run lint` 全部通过
-2. **全链路检查**：改一个功能必须顺着整条链路检查前后端同步
-3. **不展示虚假数据**：没有真实数据时展示空态，不编造假数据
+| 日期 | 类型 | 说明 |
+|------|------|------|
+| 2026-04-11 | feat | P2 完成：知识点向量化、资料全链路关联、教学风格自适应/可选、交错复习 |
+| 2026-04-11 | feat | P1 全部完成：Bloom 出题、晨间简报、仪表盘热力图、复习体验、考试模式、对话考察等 |
+| 2026-04-10 | feat | P0 全部完成：FSRS 迁移、苏格拉底升级、诊断精细化、注入防护、变式题、错题本 |
+| 2026-04-10 | feat | 集成 Codex Provider，支持设置页热切换 LLM |
+| 2026-04-09 | feat | 知识图谱 API + 可视化、Dreaming Sweep、记忆页 |
+| 2026-04-09 | feat | 资料上传 + AI 解析 + 知识点提取 + 课程系统 |
+| 2026-04-09 | feat | SSE 流式对话 + 会话持久化 + Orchestrator 多 Agent 编排 |
+| 2026-04-09 | feat | 项目初始化，Docker 全容器化开发环境 |
 
 ---
 
