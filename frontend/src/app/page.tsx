@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useRef, useState, startTransition } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
-import Link from "next/link";
-
 import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageList } from "@/components/chat/MessageList";
 import { BrandMark } from "@/components/layout/BrandMark";
@@ -30,7 +28,7 @@ export default function Home() {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
-  const [briefingCollapsed, setBriefingCollapsed] = useState(false);
+  const [briefingCollapsed, setBriefingCollapsed] = useState(true);
   const requestedConversationId = searchParams?.get("conversation") ?? null;
   const learnQuery = searchParams?.get("q") ?? null;
 
@@ -142,75 +140,63 @@ export default function Home() {
             </h1>
           </div>
 
-          {/* 晨间简报卡片 */}
-          {briefing && !briefingCollapsed && (
-            <div className="mb-6 w-full max-w-[46rem] rounded-2xl border border-stone-200 bg-white p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm font-medium text-stone-800">{briefing.greeting || "今日学习建议"}</span>
-                <button
-                  type="button"
-                  onClick={() => setBriefingCollapsed(true)}
-                  className="text-xs text-stone-400 hover:text-stone-600"
-                >
-                  收起
-                </button>
-              </div>
-              <div className="space-y-3 text-sm">
-                {briefing.review_items.length > 0 && (
-                  <div>
-                    <p className="mb-1.5 text-xs font-medium text-stone-500">待复习</p>
-                    <div className="flex flex-wrap gap-2">
-                      {briefing.review_items.map((item) => (
-                        <Link
-                          key={item.concept}
-                          href={`/?q=复习一下${item.concept}`}
-                          className="rounded-lg border border-[#C67A4A]/20 bg-[#C67A4A]/5 px-3 py-1.5 text-xs text-[#C67A4A] transition hover:bg-[#C67A4A]/10"
-                        >
-                          {item.concept}
-                          {item.est_minutes ? <span className="ml-1 text-stone-400">~{item.est_minutes}分钟</span> : null}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {briefing.new_items.length > 0 && (
-                  <div>
-                    <p className="mb-1.5 text-xs font-medium text-stone-500">建议新学</p>
-                    <div className="flex flex-wrap gap-2">
-                      {briefing.new_items.map((item) => (
-                        <Link
-                          key={item.concept}
-                          href={`/?q=教我${item.concept}`}
-                          className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs text-stone-700 transition hover:bg-stone-100"
-                        >
-                          {item.concept}
-                          {item.reason ? <span className="ml-1 text-stone-400">· {item.reason}</span> : null}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {briefing.quiz_suggestion && (
-                  <div>
-                    <Link
-                      href={`/quiz?concept=${encodeURIComponent(briefing.quiz_suggestion.concept)}`}
-                      className="inline-flex items-center gap-1 rounded-lg bg-stone-800 px-3 py-1.5 text-xs text-white transition hover:bg-stone-700"
-                    >
-                      测验巩固：{briefing.quiz_suggestion.concept}
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* 晨间简报 — 紧凑模式 */}
           {briefing && briefingCollapsed && (
             <button
               type="button"
               onClick={() => setBriefingCollapsed(false)}
-              className="mb-6 text-xs text-stone-400 hover:text-stone-600"
+              className="mb-4 flex items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-1.5 text-xs text-stone-500 transition hover:border-stone-300 hover:text-stone-700"
             >
-              展开今日学习建议
+              <span>📋</span>
+              今日建议：{briefing.review_items.length} 项复习
+              {briefing.new_items.length > 0 ? `，${briefing.new_items.length} 项新学` : ""}
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
+          )}
+          {briefing && !briefingCollapsed && (
+            <div className="mb-4 w-full max-w-[46rem] rounded-xl border border-stone-200 bg-white px-4 py-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="truncate text-xs text-stone-500">📋 {briefing.greeting}</span>
+                <button
+                  type="button"
+                  onClick={() => setBriefingCollapsed(true)}
+                  className="ml-2 shrink-0 rounded-full border border-stone-200 px-2 py-0.5 text-xs text-stone-400 transition hover:bg-stone-50 hover:text-stone-600"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {briefing.review_items.map((item, i) => (
+                  <button
+                    key={`r-${i}`}
+                    type="button"
+                    onClick={() => sendMessage(`复习一下「${item.concept}」`)}
+                    className="rounded-full border border-[#C67A4A]/20 bg-[#C67A4A]/5 px-2.5 py-1 text-xs text-[#C67A4A] transition hover:bg-[#C67A4A]/15"
+                  >
+                    复习 {item.concept}
+                  </button>
+                ))}
+                {briefing.new_items.map((item, i) => (
+                  <button
+                    key={`n-${i}`}
+                    type="button"
+                    onClick={() => sendMessage(`我想学习「${item.concept}」`)}
+                    className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs text-stone-600 transition hover:bg-stone-100"
+                  >
+                    学习 {item.concept}
+                  </button>
+                ))}
+                {briefing.quiz_suggestion && (
+                  <button
+                    type="button"
+                    onClick={() => sendMessage(`测验一下「${briefing.quiz_suggestion!.concept}」`)}
+                    className="rounded-full bg-stone-800 px-2.5 py-1 text-xs text-white transition hover:bg-stone-700"
+                  >
+                    测验 {briefing.quiz_suggestion.concept}
+                  </button>
+                )}
+              </div>
+            </div>
           )}
 
           <div className="w-full max-w-[46rem]">

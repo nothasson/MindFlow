@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -197,7 +198,9 @@ export default function WrongBookPage() {
                         <div className="space-y-2 rounded-xl bg-stone-50 p-3 text-sm">
                           <div>
                             <span className="font-medium text-stone-600">原题：</span>
-                            <p className="mt-1 whitespace-pre-wrap text-stone-700">{entry.question}</p>
+                            <div className="mt-1">
+                              <MarkdownRenderer content={entry.question} />
+                            </div>
                           </div>
                           {entry.user_answer && (
                             <div>
