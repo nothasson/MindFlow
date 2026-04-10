@@ -275,7 +275,7 @@ export default function KnowledgePage() {
               onClick={() => setSelected(n)}
             >
               <circle
-                r={Math.max(28, 10 + n.concept.length * 5)}
+                r={Math.min(50, Math.max(28, 10 + n.concept.length * 5))}
                 fill={confidenceColor(n.confidence)}
                 fillOpacity={0.85}
                 stroke={selected?.id === n.id ? "#57534e" : "#EEECE2"}

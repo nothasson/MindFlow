@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, startTransition } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageList } from "@/components/chat/MessageList";
@@ -14,6 +14,7 @@ import type { Conversation } from "@/lib/types";
 
 export default function Home() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const {
     messages,
     isLoading,
@@ -34,9 +35,11 @@ export default function Home() {
   useEffect(() => {
     if (learnQuery && !learnQueryHandled.current && !isLoading && messages.length === 0) {
       learnQueryHandled.current = true;
-      sendMessage(`我想学习「${learnQuery}」这个概念，请引导我理解`);
+      sendMessage(learnQuery);
+      // 清除 URL 参数，防止刷新重复触发
+      router.replace("/");
     }
-  }, [learnQuery, isLoading, messages.length, sendMessage]);
+  }, [learnQuery, isLoading, messages.length, sendMessage, router]);
 
   const refreshConversations = useCallback(async () => {
     try {
