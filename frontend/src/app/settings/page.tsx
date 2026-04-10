@@ -259,9 +259,9 @@ export default function SettingsPage() {
                   <p className="text-sm text-stone-400">暂无知识点，先去学习一些内容</p>
                 ) : (
                   <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
-                    {allConcepts.map((c) => (
+                    {allConcepts.map((c, i) => (
                       <button
-                        key={c.name}
+                        key={`concept-${i}-${c.name}`}
                         type="button"
                         onClick={() => toggleConcept(c.name)}
                         className={`rounded-full border px-3 py-1 text-xs transition ${

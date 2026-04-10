@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -18,15 +19,21 @@ import (
 
 // QuizHandler 答题 API 处理器
 type QuizHandler struct {
-	quiz          *agent.QuizAgent
-	variantQuiz   *agent.VariantQuizAgent
-	knowledgeRepo *repository.KnowledgeRepo
-	quizRepo      *repository.QuizRepo
+	quiz             *agent.QuizAgent
+	variantQuiz      *agent.VariantQuizAgent
+	knowledgeRepo    *repository.KnowledgeRepo
+	quizRepo         *repository.QuizRepo
+	sourceLinkRepo   *repository.SourceLinkRepo // 来源关联（可选）
 }
 
 // NewQuizHandler 创建答题处理器
 func NewQuizHandler(quiz *agent.QuizAgent, variantQuiz *agent.VariantQuizAgent, knowledgeRepo *repository.KnowledgeRepo, quizRepo *repository.QuizRepo) *QuizHandler {
 	return &QuizHandler{quiz: quiz, variantQuiz: variantQuiz, knowledgeRepo: knowledgeRepo, quizRepo: quizRepo}
+}
+
+// SetSourceLinkRepo 注入来源关联仓库（可选）。
+func (h *QuizHandler) SetSourceLinkRepo(repo *repository.SourceLinkRepo) {
+	h.sourceLinkRepo = repo
 }
 
 // Generate POST /api/quiz/generate — 给定概念出题
@@ -117,14 +124,23 @@ func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 		attempt, createErr := h.quizRepo.CreateAttempt(ctx, nil, nil, req.Question, req.Answer, isCorrect, score, explanation)
 		if createErr != nil {
 			log.Printf("记录答题失败: %v", createErr)
-		} else if !isCorrect && attempt != nil && req.Concept != "" {
-			// 答错自动写入错题本
-			errorType := "method_error" // 默认错误类型，后续可由诊断 Agent 细化
-			if score <= 1 {
-				errorType = "concept_error"
+		} else if attempt != nil {
+			// 写入来源关联：将知识点与测验记录关联
+			if h.sourceLinkRepo != nil && req.Concept != "" {
+				if linkErr := h.sourceLinkRepo.CreateLink(ctx, req.Concept, "quiz", attempt.ID, ""); linkErr != nil {
+					log.Printf("写入来源关联失败 (concept=%s, quiz=%s): %v", req.Concept, attempt.ID, linkErr)
+				}
 			}
-			if wbErr := h.quizRepo.CreateWrongBookEntry(ctx, attempt.ID, req.Concept, errorType); wbErr != nil {
-				log.Printf("写入错题本失败: %v", wbErr)
+
+			if !isCorrect && req.Concept != "" {
+				// 答错自动写入错题本
+				errorType := "method_error" // 默认错误类型，后续可由诊断 Agent 细化
+				if score <= 1 {
+					errorType = "concept_error"
+				}
+				if wbErr := h.quizRepo.CreateWrongBookEntry(ctx, attempt.ID, req.Concept, errorType); wbErr != nil {
+					log.Printf("写入错题本失败: %v", wbErr)
+				}
 			}
 		}
 	}
@@ -192,20 +208,22 @@ func (h *QuizHandler) ConversationalQuiz(ctx context.Context, c *app.RequestCont
 		c.JSON(http.StatusBadRequest, utils.H{"error": "请求格式错误"})
 		return
 	}
-	if req.Concept == "" || req.Message == "" {
-		c.JSON(http.StatusBadRequest, utils.H{"error": "请提供概念和回答内容"})
+	if req.Concept == "" {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "请提供考察概念"})
 		return
 	}
 	if req.Round <= 0 {
 		req.Round = 1
 	}
 
-	// 把当前消息追加到历史
+	// 把当前消息追加到历史（第一轮 message 可能为空，跳过）
 	fullHistory := req.History
-	if fullHistory != "" {
-		fullHistory += "\n"
+	if req.Message != "" {
+		if fullHistory != "" {
+			fullHistory += "\n"
+		}
+		fullHistory += fmt.Sprintf("学生（第%d轮）：%s", req.Round, req.Message)
 	}
-	fullHistory += fmt.Sprintf("学生（第%d轮）：%s", req.Round, req.Message)
 
 	genCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -219,13 +237,59 @@ func (h *QuizHandler) ConversationalQuiz(ctx context.Context, c *app.RequestCont
 	// 更新历史
 	fullHistory += fmt.Sprintf("\n导师（第%d轮）：%s", req.Round, result)
 
-	// 判断是否完成（第 8 轮及以上）
-	finished := req.Round >= 8
+	// 检测 AI 是否决定结束考察（通过 [考察完成] 标记）
+	finished := strings.Contains(result, "[考察完成]") || strings.Contains(result, "【考察完成】")
+
+	// 对话考察完成时，从 AI 回复中提取评分并更新掌握度
+	var finalScore int
+	if finished && h.knowledgeRepo != nil {
+		// 尝试提取 1-5 分的评分
+		for _, ch := range result {
+			if ch >= '1' && ch <= '5' {
+				finalScore = int(ch - '0')
+				break
+			}
+		}
+		if finalScore > 0 {
+			rating := review.ScoreToRating(finalScore)
+			if err := h.knowledgeRepo.UpdateMasteryWithFSRS(ctx, req.Concept, rating); err != nil {
+				log.Printf("对话考察更新掌握度失败: %v", err)
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, utils.H{
 		"reply":    result,
 		"round":    req.Round + 1,
 		"history":  fullHistory,
 		"finished": finished,
+		"score":    finalScore,
 	})
+}
+
+// AnkiRate POST /api/quiz/anki-rate — Anki 卡片评分，直接更新 FSRS 掌握度
+func (h *QuizHandler) AnkiRate(ctx context.Context, c *app.RequestContext) {
+	var req struct {
+		Concept string `json:"concept"`
+		Rating  int    `json:"rating"` // 1=Again, 2=Hard, 3=Good, 4=Easy
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "请求格式错误"})
+		return
+	}
+	if req.Concept == "" || req.Rating < 1 || req.Rating > 4 {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "请提供概念和有效评分（1-4）"})
+		return
+	}
+
+	if h.knowledgeRepo != nil {
+		// FSRS Rating: 1=Again, 2=Hard, 3=Good, 4=Easy
+		if err := h.knowledgeRepo.UpdateMasteryWithFSRS(ctx, req.Concept, review.Rating(req.Rating)); err != nil {
+			log.Printf("Anki 评分更新掌握度失败: %v", err)
+			c.JSON(http.StatusInternalServerError, utils.H{"error": "更新失败"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, utils.H{"ok": true, "concept": req.Concept, "rating": req.Rating})
 }

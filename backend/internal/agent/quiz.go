@@ -145,23 +145,25 @@ Bloom 认知层级：%s
 func (q *QuizAgent) GenerateConversationalQuiz(ctx context.Context, concept string, round int, history string) (string, error) {
 	conversationalPrompt := fmt.Sprintf(`你是考察导师。通过多轮对话深入考察学生对「%s」的理解。
 
-当前是第 %d 轮。
-- 第 1 轮：提出开放性问题，让学生阐述对概念的理解
-- 第 2-3 轮：追问"为什么？""还有其他方式吗？"深入探究
-- 第 4-5 轮：提出反例或边界情况，测试理解深度
-- 第 6-7 轮：让学生总结核心要点
-- 第 8+ 轮：给出综合评估和评分（1-5分），格式为：
+当前是第 %d 轮对话。你的策略：
+1. 先从开放性问题入手，了解学生当前理解水平
+2. 根据回答质量决定是追问、提出反例还是转换角度
+3. 当你认为已经充分了解学生的掌握程度时（通常 3-6 轮），主动结束考察
 
-**综合评估**
-- 评分：X/5
-- 优点：...
-- 不足：...
-- 建议：...
+## 结束考察规则
+当你觉得考察已经充分，在回复末尾输出综合评估，格式必须包含：
+[考察完成]
+评分：X/5
+优点：...
+不足：...
+建议：...
+
+只有你觉得考察充分时才输出 [考察完成]。如果学生回答很简短或敷衍，可以继续追问。
 
 对话历史：
 %s
 
-请根据当前轮次和对话历史，给出你的回复。使用中文。`, concept, round, history)
+请根据对话历史给出你的回复。使用中文。`, concept, round, history)
 
 	messages := []*schema.Message{
 		schema.SystemMessage(WrapPromptWithDefense(conversationalPrompt)),

@@ -106,6 +106,7 @@ func main() {
 	// 初始化 Repository（知识图谱）
 	knowledgeRepo := repository.NewKnowledgeRepo(db)
 	courseRepo := repository.NewCourseRepo(db)
+	sourceLinkRepo := repository.NewSourceLinkRepo(db)
 
 	// 初始化课程生成 Agent
 	courseware := agent.NewCoursewareAgent(chatModel)
@@ -119,13 +120,19 @@ func main() {
 	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo, knowledgeRepo, chatAI)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
 	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo, chatModel)
+	resourceHandler.SetSourceLinkWriter(sourceLinkRepo)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)
+	knowledgeHandler.SetSourceLinkRepo(sourceLinkRepo)
+	if aiClient != nil {
+		knowledgeHandler.SetAIClient(aiClient)
+	}
 	courseHandler := handler.NewCourseHandler(courseRepo, resourceRepo, courseware)
 	dashboardHandler := handler.NewDashboardHandler(convRepo, msgRepo, resourceRepo, courseRepo, knowledgeRepo)
 	reviewHandler := handler.NewReviewHandler(knowledgeRepo)
 	memoryPageHandler := handler.NewMemoryPageHandler(convRepo, msgRepo, knowledgeRepo)
 	quizRepo := repository.NewQuizRepo(db)
 	quizHandler := handler.NewQuizHandler(agent.NewQuizAgent(chatModel), agent.NewVariantQuizAgent(chatModel), knowledgeRepo, quizRepo)
+	quizHandler.SetSourceLinkRepo(sourceLinkRepo)
 	wrongBookHandler := handler.NewWrongBookHandler(quizRepo)
 
 	// 初始化考试计划 Handler
@@ -224,6 +231,12 @@ func main() {
 	h.GET("/api/knowledge/learning-path", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.LearningPath(ctx, c)
 	})
+	h.GET("/api/knowledge/sources", func(ctx context.Context, c *app.RequestContext) {
+		knowledgeHandler.Sources(ctx, c)
+	})
+	h.GET("/api/knowledge/search", func(ctx context.Context, c *app.RequestContext) {
+		knowledgeHandler.SemanticSearch(ctx, c)
+	})
 
 	// 记忆系统路由
 	if memHandler != nil {
@@ -296,6 +309,9 @@ func main() {
 	})
 	h.POST("/api/quiz/variant", func(ctx context.Context, c *app.RequestContext) {
 		quizHandler.GenerateVariant(ctx, c)
+	})
+	h.POST("/api/quiz/anki-rate", func(ctx context.Context, c *app.RequestContext) {
+		quizHandler.AnkiRate(ctx, c)
 	})
 
 	// 错题本路由

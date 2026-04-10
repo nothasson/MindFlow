@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
+import { ChatInput } from "@/components/chat/ChatInput";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -44,6 +45,13 @@ export default function QuizPage() {
   const [convMessages, setConvMessages] = useState<ConvMessage[]>([]);
   const [convInput, setConvInput] = useState("");
   const [convSessionId, setConvSessionId] = useState("");
+
+  // Anki 卡片模式
+  const [ankiMode, setAnkiMode] = useState(false);
+  const [ankiCards, setAnkiCards] = useState<string[]>([]);
+  const [ankiIndex, setAnkiIndex] = useState(0);
+  const [ankiFlipped, setAnkiFlipped] = useState(false);
+  const [ankiScores, setAnkiScores] = useState<number[]>([]);
   const [convLoading, setConvLoading] = useState(false);
   const [convFinished, setConvFinished] = useState(false);
   const [convRound, setConvRound] = useState(0);
@@ -278,32 +286,40 @@ export default function QuizPage() {
                 )}
               </div>
 
-              {/* 输入框 */}
+              {/* 输入框 — 复用主对话框组件 */}
               {!convFinished ? (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={convInput}
-                    onChange={(e) => setConvInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        sendConvMessage();
-                      }
-                    }}
-                    placeholder="输入你的回答..."
-                    disabled={convLoading}
-                    className="flex-1 rounded-xl border border-stone-200 px-4 py-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400 disabled:bg-stone-50"
-                  />
-                  <button
-                    type="button"
-                    onClick={sendConvMessage}
-                    disabled={!convInput.trim() || convLoading}
-                    className="rounded-xl bg-stone-800 px-5 py-3 text-sm font-medium text-white transition hover:bg-stone-700 disabled:bg-stone-400"
-                  >
-                    发送
-                  </button>
-                </div>
+                <ChatInput
+                  isLoading={convLoading}
+                  onSend={async (content) => {
+                    setConvInput(content);
+                    // 直接调用发送逻辑
+                    if (!content.trim() || convLoading || convFinished) return;
+                    setConvMessages((prev) => [...prev, { role: "user", content }]);
+                    setConvLoading(true);
+                    setError(null);
+                    try {
+                      const res = await fetch(`${API_URL}/api/quiz/conversation`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          concept,
+                          message: content,
+                          round: convRound,
+                          history: convMessages.map((m) => `${m.role === "ai" ? "导师" : "学生"}：${m.content}`).join("\n"),
+                        }),
+                      });
+                      if (!res.ok) throw new Error("对话失败");
+                      const data = await res.json();
+                      setConvMessages((prev) => [...prev, { role: "ai", content: data.reply }]);
+                      setConvRound(data.round);
+                      if (data.finished) setConvFinished(true);
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "对话失败");
+                    } finally {
+                      setConvLoading(false);
+                    }
+                  }}
+                />
               ) : (
                 <div className="rounded-2xl border border-stone-200 bg-white p-4 text-center">
                   <p className="mb-3 text-sm text-stone-600">对话考察已完成</p>
