@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -35,11 +36,15 @@ func (h *QuizHandler) Generate(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// 加 30 秒超时
+	genCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	messages := []*schema.Message{
 		schema.UserMessage("请针对「" + req.Concept + "」这个概念出 3 道题"),
 	}
 
-	result, err := h.quiz.GenerateQuiz(ctx, messages)
+	result, err := h.quiz.GenerateQuiz(genCtx, messages)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "出题失败: " + err.Error()})
 		return
@@ -51,7 +56,7 @@ func (h *QuizHandler) Generate(ctx context.Context, c *app.RequestContext) {
 	})
 }
 
-// Submit POST /api/quiz/submit — 提交答案评分
+// Submit POST /api/quiz/submit — 提交答案，用 LLM 评分
 func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 	var req struct {
 		Concept  string `json:"concept"`
@@ -63,12 +68,21 @@ func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// 简单评分逻辑（后续改为 LLM 判断）
-	isCorrect := len(req.Answer) > 10
-	score := 3
-	if isCorrect {
-		score = 4
+	if req.Answer == "" {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "答案不能为空"})
+		return
 	}
+
+	// 用 LLM 评判答案质量
+	evalCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	score, err := h.quiz.EvaluateAnswer(evalCtx, req.Question, req.Answer)
+	if err != nil {
+		log.Printf("LLM 评分失败，使用默认分数: %v", err)
+		score = 3
+	}
+	isCorrect := score >= 3
 
 	// 记录答题
 	if h.quizRepo != nil {
@@ -77,7 +91,7 @@ func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 
-	// 更新掌握度
+	// 更新遗忘曲线掌握度
 	if h.knowledgeRepo != nil && req.Concept != "" {
 		if err := h.knowledgeRepo.UpdateMasteryWithSM2(ctx, req.Concept, score); err != nil {
 			log.Printf("更新掌握度失败: %v", err)

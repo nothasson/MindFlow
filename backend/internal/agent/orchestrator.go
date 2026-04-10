@@ -25,6 +25,7 @@ const OrchestratorSystemPrompt = `你是 MindFlow 的教学调度器。你的职
 - "quiz": 出题测验（当学生要求测试或需要检验掌握度时）
 - "curriculum": 学习规划（当学生问"接下来学什么"或需要复习建议时）
 - "content": 基于资料内容教学（当学生提到资料、文档、上传内容，或问题涉及已上传资料的内容时）
+- "review": 复习模式（当学生说"开始复习""复习一下"或需要复习已学过的知识点时）
 
 注意：
 - 只输出 JSON，不要输出其他内容
@@ -40,6 +41,7 @@ const (
 	AgentTypeQuiz       AgentType = "quiz"
 	AgentTypeCurriculum AgentType = "curriculum"
 	AgentTypeContent    AgentType = "content"
+	AgentTypeReview     AgentType = "review"
 )
 
 // RouteDecision 路由决策
@@ -106,6 +108,8 @@ func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (st
 		reply, err = o.curriculum.Plan(ctx, messages)
 	case AgentTypeDiagnostic:
 		reply, err = o.diagnostic.Diagnose(ctx, messages)
+	case AgentTypeReview:
+		reply, err = o.review.Review(ctx, messages)
 	case AgentTypeContent:
 		if o.content != nil {
 			reply, err = o.content.Chat(ctx, messages)
@@ -139,6 +143,8 @@ func (o *Orchestrator) ChatStream(ctx context.Context, messages []*schema.Messag
 		return o.curriculum.PlanStream(ctx, messages)
 	case AgentTypeDiagnostic:
 		return o.diagnostic.DiagnoseStream(ctx, messages)
+	case AgentTypeReview:
+		return o.review.ReviewStream(ctx, messages)
 	case AgentTypeContent:
 		if o.content != nil {
 			return o.content.ChatStream(ctx, messages)

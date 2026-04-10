@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -12,12 +13,22 @@ export default function QuizPage() {
   const searchParams = useSearchParams();
   const concept = searchParams?.get("concept") ?? "";
 
-  const [questions, setQuestions] = useState("");
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [questions, setQuestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [result, setResult] = useState<{ is_correct: boolean; score: number } | null>(null);
+  const [result, setResult] = useState<{ score: number; is_correct: boolean } | null>(null);
+  const [scores, setScores] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [finished, setFinished] = useState(false);
+
+  // 解析 LLM 返回的多题文本为单题数组
+  const parseQuestions = (text: string): string[] => {
+    // 按 "### 题目" 或 "**题目" 分割
+    const parts = text.split(/(?=###\s*题目|(?:^|\n)\*\*题目)/);
+    const filtered = parts.filter((p) => p.trim().length > 20);
+    return filtered.length > 0 ? filtered : [text];
+  };
 
   const generateQuiz = useCallback(async () => {
     if (!concept) return;
@@ -31,7 +42,12 @@ export default function QuizPage() {
       });
       if (!res.ok) throw new Error("出题失败");
       const data = await res.json();
-      setQuestions(data.questions);
+      setAllQuestions(data.questions);
+      const parsed = parseQuestions(data.questions);
+      setQuestions(parsed);
+      setCurrentIndex(0);
+      setScores([]);
+      setFinished(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "出题失败");
     } finally {
@@ -41,20 +57,37 @@ export default function QuizPage() {
 
   const submitAnswer = useCallback(async () => {
     if (!answer.trim()) return;
+    setError(null);
     try {
       const res = await fetch(`${API_URL}/api/quiz/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ concept, question: questions.slice(0, 200), answer }),
+        body: JSON.stringify({
+          concept,
+          question: questions[currentIndex]?.slice(0, 500) ?? "",
+          answer,
+        }),
       });
       if (!res.ok) throw new Error("提交失败");
       const data = await res.json();
       setResult(data);
-      setSubmitted(true);
+      setScores((prev) => [...prev, data.score]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "提交失败");
     }
-  }, [concept, questions, answer]);
+  }, [concept, questions, currentIndex, answer]);
+
+  const nextQuestion = () => {
+    if (currentIndex + 1 >= questions.length) {
+      setFinished(true);
+    } else {
+      setCurrentIndex((i) => i + 1);
+      setAnswer("");
+      setResult(null);
+    }
+  };
+
+  const avgScore = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : "0";
 
   return (
     <MainShell>
@@ -75,9 +108,9 @@ export default function QuizPage() {
                 前往知识图谱
               </Link>
             </div>
-          ) : !questions ? (
+          ) : questions.length === 0 ? (
             <div className="rounded-2xl border border-stone-200 bg-white p-6 text-center">
-              <p className="mb-4 text-stone-500">准备好了吗？AI 将根据「{concept}」生成测验题</p>
+              <p className="mb-4 text-stone-500">准备好了吗？AI 将根据「{concept}」逐题出题</p>
               <button
                 type="button"
                 onClick={generateQuiz}
@@ -87,25 +120,82 @@ export default function QuizPage() {
                 {loading ? "出题中..." : "开始测验"}
               </button>
             </div>
+          ) : finished ? (
+            /* 测验完成总结 */
+            <div className="rounded-2xl border border-stone-200 bg-white p-6">
+              <h2 className="mb-4 text-lg font-semibold text-stone-800">测验完成</h2>
+              <div className="mb-4 grid grid-cols-3 gap-3">
+                <div className="rounded-xl bg-stone-50 p-4 text-center">
+                  <p className="text-2xl font-semibold text-stone-800">{questions.length}</p>
+                  <p className="text-xs text-stone-500">总题数</p>
+                </div>
+                <div className="rounded-xl bg-stone-50 p-4 text-center">
+                  <p className="text-2xl font-semibold text-[#6b8e6b]">
+                    {scores.filter((s) => s >= 3).length}
+                  </p>
+                  <p className="text-xs text-stone-500">答对</p>
+                </div>
+                <div className="rounded-xl bg-stone-50 p-4 text-center">
+                  <p className="text-2xl font-semibold text-stone-800">{avgScore}</p>
+                  <p className="text-xs text-stone-500">平均分</p>
+                </div>
+              </div>
+              <p className="mb-4 text-sm text-stone-500">
+                掌握度已根据你的表现更新（SM-2 遗忘曲线）。
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuestions([]);
+                    setAllQuestions("");
+                    setScores([]);
+                    setAnswer("");
+                    setResult(null);
+                    setFinished(false);
+                  }}
+                  className="rounded-lg bg-[#C67A4A] px-4 py-2 text-sm text-white transition hover:bg-[#b06a3a]"
+                >
+                  再来一轮
+                </button>
+                <Link
+                  href="/knowledge"
+                  className="rounded-lg border border-stone-200 px-4 py-2 text-sm text-stone-700 transition hover:bg-stone-100"
+                >
+                  返回知识图谱
+                </Link>
+              </div>
+            </div>
           ) : (
+            /* 答题中 */
             <div className="space-y-6">
-              {/* 题目展示 */}
-              <div className="rounded-2xl border border-stone-200 bg-white p-6">
-                <h2 className="mb-4 text-base font-semibold text-stone-800">题目</h2>
-                <div className="whitespace-pre-wrap text-sm leading-7 text-stone-700">
-                  {questions}
+              {/* 进度 */}
+              <div className="flex items-center gap-2 text-sm text-stone-500">
+                <span>第 {currentIndex + 1} / {questions.length} 题</span>
+                <div className="flex-1">
+                  <div className="h-1.5 rounded-full bg-stone-200">
+                    <div
+                      className="h-1.5 rounded-full bg-[#C67A4A] transition-all"
+                      style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* 作答区 */}
-              {!submitted ? (
+              {/* 当前题目（Markdown 渲染） */}
+              <div className="rounded-2xl border border-stone-200 bg-white p-6">
+                <MarkdownRenderer content={questions[currentIndex] ?? ""} />
+              </div>
+
+              {/* 作答 / 结果 */}
+              {!result ? (
                 <div className="rounded-2xl border border-stone-200 bg-white p-6">
-                  <h2 className="mb-3 text-base font-semibold text-stone-800">你的回答</h2>
+                  <h3 className="mb-3 text-sm font-semibold text-stone-700">你的回答</h3>
                   <textarea
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     placeholder="写下你的答案..."
-                    rows={6}
+                    rows={4}
                     className="w-full resize-none rounded-xl border border-stone-200 px-4 py-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
                   />
                   <button
@@ -117,39 +207,34 @@ export default function QuizPage() {
                     提交答案
                   </button>
                 </div>
-              ) : result ? (
+              ) : (
                 <div className="rounded-2xl border border-stone-200 bg-white p-6">
-                  <h2 className="mb-3 text-base font-semibold text-stone-800">评分结果</h2>
-                  <p className="text-sm text-stone-700">
-                    得分：{result.score}/5 · {result.is_correct ? "回答正确" : "需要继续巩固"}
-                  </p>
-                  <p className="mt-2 text-xs text-stone-500">
-                    掌握度已更新。
-                  </p>
-                  <div className="mt-4 flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => { setQuestions(""); setAnswer(""); setSubmitted(false); setResult(null); }}
-                      className="rounded-lg bg-[#C67A4A] px-4 py-2 text-sm text-white transition hover:bg-[#b06a3a]"
+                  <div className="mb-3 flex items-center gap-3">
+                    <span
+                      className={`rounded-full px-3 py-1 text-sm font-medium ${
+                        result.is_correct
+                          ? "bg-[#6b8e6b]/10 text-[#6b8e6b]"
+                          : "bg-[#c07060]/10 text-[#c07060]"
+                      }`}
                     >
-                      再来一轮
-                    </button>
-                    <Link
-                      href="/knowledge"
-                      className="rounded-lg border border-stone-200 px-4 py-2 text-sm text-stone-700 transition hover:bg-stone-100"
-                    >
-                      返回知识图谱
-                    </Link>
+                      {result.is_correct ? "回答正确" : "需要巩固"}
+                    </span>
+                    <span className="text-sm text-stone-500">得分：{result.score}/5</span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={nextQuestion}
+                    className="rounded-lg bg-[#C67A4A] px-4 py-2 text-sm text-white transition hover:bg-[#b06a3a]"
+                  >
+                    {currentIndex + 1 >= questions.length ? "查看总结" : "下一题"}
+                  </button>
                 </div>
-              ) : null}
+              )}
             </div>
           )}
 
           {error ? (
-            <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
+            <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
           ) : null}
         </div>
       </div>

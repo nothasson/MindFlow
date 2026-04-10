@@ -92,7 +92,7 @@ export default function ReviewPage() {
                 {dueItems.map((item) => (
                   <a
                     key={item.id}
-                    href={`/?q=${encodeURIComponent(item.concept)}`}
+                    href={`/?q=${encodeURIComponent("复习一下" + item.concept)}`}
                     className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50 p-4 transition hover:bg-stone-100"
                   >
                     <div>

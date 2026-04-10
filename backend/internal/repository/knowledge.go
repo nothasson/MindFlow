@@ -268,3 +268,12 @@ func (r *KnowledgeRepo) DeleteByConcept(ctx context.Context, concept string) err
 	_, err := r.pool.Exec(ctx, `DELETE FROM knowledge_mastery WHERE concept = $1`, concept)
 	return err
 }
+
+// UpdateErrorType 更新知识点的错误类型
+func (r *KnowledgeRepo) UpdateErrorType(ctx context.Context, concept string, errorType string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE knowledge_mastery SET error_type = $1, updated_at = NOW() WHERE concept = $2`,
+		errorType, concept,
+	)
+	return err
+}

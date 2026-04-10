@@ -471,7 +471,7 @@ MindFlow/
 
 | 决策 | 原因 |
 |------|------|
-| Go + Eino 做 Agent | 学习公司技术栈，Eino 原生支持 ChatModel + Stream |
+| Go + Eino 做 Agent | Eino 原生支持 ChatModel + Stream |
 | Python 做 AI 微服务 | AI/ML 生态最好，PDF 解析和 Embedding 不在 Go 里重造 |
 | SSE 而非 WebSocket | 单向流式够用，实现更简单，兼容性更好 |
 | pgx 而非 ORM | 直接 SQL，无魔法，易调试 |

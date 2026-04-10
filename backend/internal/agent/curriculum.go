@@ -78,3 +78,17 @@ func (c *CurriculumAgent) PlanStream(ctx context.Context, messages []*schema.Mes
 
 	return reader, nil
 }
+
+// PlanWithContext 带掌握度上下文的学习规划
+func (c *CurriculumAgent) PlanWithContext(ctx context.Context, messages []*schema.Message, masteryContext string) (string, error) {
+	enhancedPrompt := c.systemPrompt + "\n\n当前学生的知识掌握度如下：\n" + masteryContext
+	fullMessages := make([]*schema.Message, 0, len(messages)+1)
+	fullMessages = append(fullMessages, schema.SystemMessage(enhancedPrompt))
+	fullMessages = append(fullMessages, messages...)
+
+	resp, err := c.chatModel.Generate(ctx, fullMessages)
+	if err != nil {
+		return "", fmt.Errorf("学习规划失败: %w", err)
+	}
+	return resp.Content, nil
+}

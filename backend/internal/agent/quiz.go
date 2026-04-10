@@ -69,3 +69,36 @@ func (q *QuizAgent) GenerateQuizStream(ctx context.Context, messages []*schema.M
 
 	return reader, nil
 }
+
+const EvaluateSystemPrompt = `你是答案评分员。请评估学生对题目的回答质量。
+
+评分标准（0-5 分）：
+- 5 分：完全正确，表述清晰
+- 4 分：基本正确，有小瑕疵
+- 3 分：部分正确，核心概念理解但有错误
+- 2 分：大部分错误，只答对了边缘内容
+- 1 分：几乎全错
+- 0 分：完全错误或没有实质内容
+
+请只回复一个 0-5 的数字，不要输出任何其他内容。`
+
+// EvaluateAnswer 评估学生回答质量，返回 0-5 分
+func (q *QuizAgent) EvaluateAnswer(ctx context.Context, question, answer string) (int, error) {
+	messages := []*schema.Message{
+		schema.SystemMessage(EvaluateSystemPrompt),
+		schema.UserMessage("题目：" + question + "\n\n学生回答：" + answer),
+	}
+
+	resp, err := q.chatModel.Generate(ctx, messages)
+	if err != nil {
+		return 3, fmt.Errorf("评分失败: %w", err)
+	}
+
+	// 提取数字
+	for _, ch := range resp.Content {
+		if ch >= '0' && ch <= '5' {
+			return int(ch - '0'), nil
+		}
+	}
+	return 3, nil // 默认中等
+}
