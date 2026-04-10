@@ -28,6 +28,7 @@ export default function Home() {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(true);
   const [briefingCollapsed, setBriefingCollapsed] = useState(true);
   const requestedConversationId = searchParams?.get("conversation") ?? null;
   const learnQuery = searchParams?.get("q") ?? null;
@@ -57,7 +58,14 @@ export default function Home() {
   useEffect(() => {
     refreshConversations();
     // 加载晨间简报
-    getDailyBriefing().then((b) => setBriefing(b)).catch(() => {});
+    getDailyBriefing()
+      .then((b) => {
+        if (b && b.review_items) setBriefing(b);
+      })
+      .catch((err) => {
+        console.warn("晨间简报加载失败:", err);
+      })
+      .finally(() => setBriefingLoading(false));
   }, [refreshConversations]);
 
   // 流式结束后刷新会话列表
@@ -140,8 +148,14 @@ export default function Home() {
             </h1>
           </div>
 
-          {/* 晨间简报 — 紧凑模式 */}
-          {briefing && briefingCollapsed && (
+          {/* 晨间简报 */}
+          {briefingLoading && (
+            <div className="mb-4 flex items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-1.5 text-xs text-stone-400">
+              <span className="animate-pulse">📋</span>
+              正在生成今日学习建议...
+            </div>
+          )}
+          {!briefingLoading && briefing && briefingCollapsed && (
             <button
               type="button"
               onClick={() => setBriefingCollapsed(false)}
