@@ -47,7 +47,7 @@ type CurriculumAgent struct {
 func NewCurriculumAgent(chatModel model.ChatModel) *CurriculumAgent {
 	return &CurriculumAgent{
 		chatModel:    chatModel,
-		systemPrompt: CurriculumSystemPrompt,
+		systemPrompt: WrapPromptWithDefense(CurriculumSystemPrompt),
 	}
 }
 

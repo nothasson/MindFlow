@@ -38,7 +38,7 @@ type QuizAgent struct {
 func NewQuizAgent(chatModel model.ChatModel) *QuizAgent {
 	return &QuizAgent{
 		chatModel:    chatModel,
-		systemPrompt: QuizSystemPrompt,
+		systemPrompt: WrapPromptWithDefense(QuizSystemPrompt),
 	}
 }
 

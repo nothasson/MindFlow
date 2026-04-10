@@ -42,7 +42,6 @@ export default function QuizPage() {
       });
       if (!res.ok) throw new Error("出题失败");
       const data = await res.json();
-      setAllQuestions(data.questions);
       const parsed = parseQuestions(data.questions);
       setQuestions(parsed);
       setCurrentIndex(0);
@@ -148,7 +147,6 @@ export default function QuizPage() {
                   type="button"
                   onClick={() => {
                     setQuestions([]);
-                    setAllQuestions("");
                     setScores([]);
                     setAnswer("");
                     setResult(null);

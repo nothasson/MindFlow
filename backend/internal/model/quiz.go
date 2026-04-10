@@ -6,6 +6,22 @@ import (
 	"github.com/google/uuid"
 )
 
+// 错误类型常量 — 基础错误（5 种）
+const (
+	ErrorKnowledgeGap     = "knowledge_gap"      // 知识遗漏
+	ErrorConceptConfusion = "concept_confusion"   // 概念混淆
+	ErrorConceptError     = "concept_error"       // 概念错误
+	ErrorMethodError      = "method_error"        // 方法错误
+	ErrorCalculationError = "calculation_error"   // 计算错误
+)
+
+// 错误类型常量 — 元认知错误（3 种）
+const (
+	ErrorOverconfidence    = "overconfidence"     // 过度自信
+	ErrorStrategyError     = "strategy_error"     // 策略错误
+	ErrorUnclearExpression = "unclear_expression" // 表述不清
+)
+
 // QuizAttempt 测验记录
 type QuizAttempt struct {
 	ID          uuid.UUID  `json:"id"`

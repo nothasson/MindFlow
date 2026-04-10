@@ -38,7 +38,7 @@ func NewContentAgent(chatModel model.ChatModel, aiClient *service.AIClient) *Con
 	return &ContentAgent{
 		chatModel:    chatModel,
 		aiClient:     aiClient,
-		systemPrompt: ContentAgentSystemPrompt,
+		systemPrompt: WrapPromptWithDefense(ContentAgentSystemPrompt),
 	}
 }
 

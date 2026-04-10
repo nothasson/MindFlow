@@ -50,8 +50,8 @@ type SSEData struct {
 	Error          string `json:"error,omitempty"`
 }
 
-// chatAIClient 抽象 AI 微服务能力，用于对话后提取知识点。
-type chatAIClient interface {
+// ChatAIClient 抽象 AI 微服务能力，用于对话后提取知识点。
+type ChatAIClient interface {
 	ExtractKnowledgePoints(text string) (*service.ExtractResponse, error)
 }
 
@@ -61,11 +61,11 @@ type ChatHandler struct {
 	convRepo      *repository.ConversationRepo
 	msgRepo       *repository.MessageRepo
 	knowledgeRepo *repository.KnowledgeRepo
-	aiClient      chatAIClient
+	aiClient      ChatAIClient
 }
 
 // NewChatHandler 创建对话处理器
-func NewChatHandler(orchestrator *agent.Orchestrator, convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo, knowledgeRepo *repository.KnowledgeRepo, aiClient chatAIClient) *ChatHandler {
+func NewChatHandler(orchestrator *agent.Orchestrator, convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo, knowledgeRepo *repository.KnowledgeRepo, aiClient ChatAIClient) *ChatHandler {
 	return &ChatHandler{orchestrator: orchestrator, convRepo: convRepo, msgRepo: msgRepo, knowledgeRepo: knowledgeRepo, aiClient: aiClient}
 }
 
@@ -140,8 +140,9 @@ func (h *ChatHandler) ensureConversation(ctx context.Context, req ChatRequest) (
 	for _, m := range req.Messages {
 		if m.Role == "user" {
 			title = m.Content
-			if len(title) > 30 {
-				title = title[:30]
+			runes := []rune(title)
+			if len(runes) > 30 {
+				title = string(runes[:30])
 			}
 			break
 		}
@@ -264,6 +265,12 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 // extractAndSaveKnowledge 异步从对话内容中提取知识点并写入知识图谱。
 // 在后台 goroutine 中执行，不阻塞响应。
 func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("extractAndSaveKnowledge panic: %v", r)
+		}
+	}()
+
 	if h.aiClient == nil || h.knowledgeRepo == nil {
 		return
 	}

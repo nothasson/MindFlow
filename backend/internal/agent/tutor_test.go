@@ -36,8 +36,10 @@ func TestTutorAgent_SystemPrompt(t *testing.T) {
 	// 必须包含核心苏格拉底规则
 	requiredRules := []string{
 		"绝不直接给出答案",
-		"提问引导",
+		"引导",
 		"中文",
+		"IARA",
+		"CARA",
 	}
 
 	for _, rule := range requiredRules {

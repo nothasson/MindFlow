@@ -50,27 +50,70 @@ type RouteDecision struct {
 	Reason string    `json:"reason"`
 }
 
+// StuckDetector 卡住检测器 — 跟踪连续错误/正确轮次
+type StuckDetector struct {
+	wrongCount   int // 连续错误轮次
+	correctCount int // 连续正确轮次
+}
+
+// OnDiagnostic 根据诊断结果更新计数
+func (d *StuckDetector) OnDiagnostic(isCorrect bool) {
+	if isCorrect {
+		d.correctCount++
+		d.wrongCount = 0
+	} else {
+		d.wrongCount++
+		d.correctCount = 0
+	}
+}
+
+// Reset 重置计数
+func (d *StuckDetector) Reset() {
+	d.wrongCount = 0
+	d.correctCount = 0
+}
+
+// SupportLevel 返回当前应使用的支持力度
+func (d *StuckDetector) SupportLevel() string {
+	switch {
+	case d.wrongCount >= 5:
+		return "heavy" // 降低难度，拆分子问题
+	case d.wrongCount >= 3:
+		return "medium" // 方法性提示
+	case d.wrongCount >= 1:
+		return "light" // 概念性提示
+	case d.correctCount >= 3:
+		return "advance" // 提高难度
+	default:
+		return "normal"
+	}
+}
+
 // Orchestrator 总调度器
 type Orchestrator struct {
-	chatModel  model.ChatModel
-	tutor      *TutorAgent
-	diagnostic *DiagnosticAgent
-	memAgent   *MemoryAgent
-	quiz       *QuizAgent
-	review     *ReviewAgent
-	curriculum *CurriculumAgent
-	content    *ContentAgent
+	chatModel     model.ChatModel
+	tutor         *TutorAgent
+	diagnostic    *DiagnosticAgent
+	memAgent      *MemoryAgent
+	quiz          *QuizAgent
+	review        *ReviewAgent
+	curriculum    *CurriculumAgent
+	content       *ContentAgent
+	guard         *PromptGuard
+	stuckDetector *StuckDetector
 }
 
 // NewOrchestrator 创建调度器
 func NewOrchestrator(chatModel model.ChatModel, tutor *TutorAgent) *Orchestrator {
 	return &Orchestrator{
-		chatModel:  chatModel,
-		tutor:      tutor,
-		diagnostic: NewDiagnosticAgent(chatModel),
-		quiz:       NewQuizAgent(chatModel),
-		review:     NewReviewAgent(chatModel),
-		curriculum: NewCurriculumAgent(chatModel),
+		chatModel:     chatModel,
+		tutor:         tutor,
+		diagnostic:    NewDiagnosticAgent(chatModel),
+		quiz:          NewQuizAgent(chatModel),
+		review:        NewReviewAgent(chatModel),
+		curriculum:    NewCurriculumAgent(chatModel),
+		guard:         NewPromptGuard(),
+		stuckDetector: &StuckDetector{},
 	}
 }
 
@@ -96,6 +139,12 @@ func (o *Orchestrator) SetDifficultyLevel(level DifficultyLevel) {
 
 // Chat 根据路由决策调度对话（非流式）
 func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (string, error) {
+	// 注入防护：检测最后一条用户消息
+	if lastUserMsg := extractLastUserMessage(messages); lastUserMsg != "" && o.guard.DetectInjection(lastUserMsg) {
+		log.Printf("检测到提示词注入攻击: %s", lastUserMsg[:min(len(lastUserMsg), 50)])
+		return o.guard.InjectionRefusalMessage(), nil
+	}
+
 	decision, _ := o.Route(ctx, messages)
 
 	var reply string
@@ -117,7 +166,16 @@ func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (st
 			reply, err = o.tutor.Chat(ctx, messages)
 		}
 	default:
-		reply, err = o.tutor.Chat(ctx, messages)
+		// 注入脚手架支持力度到 tutor
+		if level := o.stuckDetector.SupportLevel(); level != "normal" {
+			hint := o.supportLevelHint(level)
+			augmented := make([]*schema.Message, 0, len(messages)+1)
+			augmented = append(augmented, messages...)
+			augmented = append(augmented, schema.SystemMessage(hint))
+			reply, err = o.tutor.Chat(ctx, augmented)
+		} else {
+			reply, err = o.tutor.Chat(ctx, messages)
+		}
 	}
 
 	// 记录学习日志
@@ -134,6 +192,16 @@ func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (st
 
 // ChatStream 根据路由决策调度流式对话
 func (o *Orchestrator) ChatStream(ctx context.Context, messages []*schema.Message) (*schema.StreamReader[*schema.Message], error) {
+	// 注入防护：检测最后一条用户消息
+	if lastUserMsg := extractLastUserMessage(messages); lastUserMsg != "" && o.guard.DetectInjection(lastUserMsg) {
+		log.Printf("检测到提示词注入攻击（流式）: %s", lastUserMsg[:min(len(lastUserMsg), 50)])
+		// 返回拒绝消息的流式 reader
+		refusal := o.guard.InjectionRefusalMessage()
+		return schema.StreamReaderFromArray([]*schema.Message{
+			{Role: schema.Assistant, Content: refusal},
+		}), nil
+	}
+
 	decision, _ := o.Route(ctx, messages)
 
 	switch decision.Agent {
@@ -244,4 +312,25 @@ func (o *Orchestrator) RecordMemory(userMsg, assistantReply string) {
 func (o *Orchestrator) GetKnowledgeRepo() interface{} {
 	// Orchestrator 不直接持有 repo，由 handler 层处理
 	return nil
+}
+
+// GetStuckDetector 返回卡住检测器（供外部更新状态）
+func (o *Orchestrator) GetStuckDetector() *StuckDetector {
+	return o.stuckDetector
+}
+
+// supportLevelHint 根据支持力度生成注入 Prompt 的提示
+func (o *Orchestrator) supportLevelHint(level string) string {
+	switch level {
+	case "light":
+		return "[系统提示] 学生刚才回答有误，请使用 CARA 纠错框架，给一个概念性提示引导。"
+	case "medium":
+		return "[系统提示] 学生已连续卡住多轮，请给出方法性提示（具体的解题步骤方向），但仍不要直接给答案。"
+	case "heavy":
+		return "[系统提示] 学生已严重卡住，请降低难度，将问题拆分为更简单的子问题，必要时补充前置知识。"
+	case "advance":
+		return "[系统提示] 学生表现出色，连续回答正确，请提高难度或推进到更深层的概念。"
+	default:
+		return ""
+	}
 }

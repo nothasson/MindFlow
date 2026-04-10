@@ -111,7 +111,12 @@ func main() {
 	courseware := agent.NewCoursewareAgent(chatModel)
 
 	// 初始化 Handler
-	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo, knowledgeRepo, aiClient)
+	// 注意：aiClient 为 nil 时必须传接口 nil 而非 typed nil，否则接口 nil 判断会失效
+	var chatAI handler.ChatAIClient
+	if aiClient != nil {
+		chatAI = aiClient
+	}
+	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo, knowledgeRepo, chatAI)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
 	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)

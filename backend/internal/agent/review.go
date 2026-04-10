@@ -34,7 +34,7 @@ type ReviewAgent struct {
 func NewReviewAgent(chatModel model.ChatModel) *ReviewAgent {
 	return &ReviewAgent{
 		chatModel:    chatModel,
-		systemPrompt: ReviewSystemPrompt,
+		systemPrompt: WrapPromptWithDefense(ReviewSystemPrompt),
 	}
 }
 
