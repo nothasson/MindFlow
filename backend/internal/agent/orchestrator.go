@@ -233,3 +233,9 @@ func (o *Orchestrator) RecordMemory(userMsg, assistantReply string) {
 	entry := "**用户**: " + userMsg + "\n\n**AI**: " + assistantReply
 	o.memAgent.RecordLog(entry)
 }
+
+// GetKnowledgeRepo 返回知识图谱 repo（供 handler 更新掌握度）
+func (o *Orchestrator) GetKnowledgeRepo() interface{} {
+	// Orchestrator 不直接持有 repo，由 handler 层处理
+	return nil
+}

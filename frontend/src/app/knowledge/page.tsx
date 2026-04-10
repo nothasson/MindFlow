@@ -7,6 +7,8 @@ import { MainShell } from "@/components/layout/MainShell";
 import { getKnowledgeGraph } from "@/lib/api";
 import type { KnowledgeNode, KnowledgeEdge } from "@/lib/types";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
 interface SimNode extends KnowledgeNode {
   x: number;
   y: number;
@@ -370,6 +372,24 @@ export default function KnowledgePage() {
               className="mt-2 flex w-full items-center justify-center rounded-lg bg-[#C67A4A] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a]"
             >
               开始学习「{selected.concept}」
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                if (!confirm(`确定删除知识点「${selected.concept}」？`)) return;
+                try {
+                  await fetch(`${API_URL}/api/knowledge/concept/${encodeURIComponent(selected.concept)}`, { method: "DELETE" });
+                  setSelected(null);
+                  // 刷新数据
+                  const data = await getKnowledgeGraph();
+                  setNodes(data.nodes);
+                  setEdges(data.edges);
+                } catch { /* 静默 */ }
+              }}
+              className="mt-1 flex w-full items-center justify-center rounded-lg border border-stone-200 px-4 py-2 text-sm text-stone-500 transition hover:bg-stone-100 hover:text-stone-700"
+            >
+              删除此知识点
             </button>
 
             {/* Related concepts */}

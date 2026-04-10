@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import re
-from urllib import error, request
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def _extract_with_llm(text: str) -> list[dict]:
         "temperature": 0.2,
     }
 
-    req = request.Request(
+    req = Request(
         url=f"{base_url}/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={
@@ -50,7 +50,7 @@ def _extract_with_llm(text: str) -> list[dict]:
     )
 
     try:
-        with request.urlopen(req, timeout=60) as resp:
+        with urlopen(req, timeout=60) as resp:
             body = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
         logger.error("LLM 知识点提取请求失败: %s", e)
@@ -82,7 +82,7 @@ def _extract_with_llm(text: str) -> list[dict]:
 
 
 def _extract_json_array(content: str) -> str:
-    match = re.search(r"\[[\s\S]*\]", content)
+    match = re.search(r"\[[\s\S]*?\]", content)
     if match:
         return match.group(0)
     return content

@@ -47,3 +47,19 @@ func (h *KnowledgeHandler) Graph(ctx context.Context, c *app.RequestContext) {
 		"edges": edges,
 	})
 }
+
+// DeleteConcept DELETE /api/knowledge/concept/:name — 删除知识点
+func (h *KnowledgeHandler) DeleteConcept(ctx context.Context, c *app.RequestContext) {
+	concept := c.Param("name")
+	if concept == "" {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "概念名不能为空"})
+		return
+	}
+
+	if err := h.repo.DeleteByConcept(ctx, concept); err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "删除失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, utils.H{"success": true})
+}

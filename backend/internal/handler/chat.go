@@ -50,14 +50,15 @@ type SSEData struct {
 
 // ChatHandler 对话 HTTP 处理器
 type ChatHandler struct {
-	orchestrator *agent.Orchestrator
-	convRepo     *repository.ConversationRepo
-	msgRepo      *repository.MessageRepo
+	orchestrator  *agent.Orchestrator
+	convRepo      *repository.ConversationRepo
+	msgRepo       *repository.MessageRepo
+	knowledgeRepo *repository.KnowledgeRepo
 }
 
 // NewChatHandler 创建对话处理器
-func NewChatHandler(orchestrator *agent.Orchestrator, convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo) *ChatHandler {
-	return &ChatHandler{orchestrator: orchestrator, convRepo: convRepo, msgRepo: msgRepo}
+func NewChatHandler(orchestrator *agent.Orchestrator, convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo, knowledgeRepo *repository.KnowledgeRepo) *ChatHandler {
+	return &ChatHandler{orchestrator: orchestrator, convRepo: convRepo, msgRepo: msgRepo, knowledgeRepo: knowledgeRepo}
 }
 
 // Handle POST /api/chat
@@ -216,6 +217,11 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 							}
 						}
 						h.orchestrator.RecordMemory(lastUserMsg, fullContent.String())
+
+					// 更新相关知识点的掌握度（对话即学习，默认评 3 分 = "困难但正确"）
+					if h.knowledgeRepo != nil {
+						h.updateRelatedMastery(lastUserMsg, 3)
+					}
 					}
 
 					data, _ := json.Marshal(SSEData{Done: true})
@@ -237,4 +243,25 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 	}()
 
 	<-done
+}
+
+// updateRelatedMastery 更新用户消息中提到的知识点掌握度
+func (h *ChatHandler) updateRelatedMastery(userMsg string, score int) {
+	if h.knowledgeRepo == nil {
+		return
+	}
+
+	// 获取所有知识点，检查用户消息是否涉及
+	nodes, err := h.knowledgeRepo.ListNodes(context.Background())
+	if err != nil {
+		return
+	}
+
+	for _, node := range nodes {
+		if strings.Contains(userMsg, node.Concept) {
+			if err := h.knowledgeRepo.UpdateMasteryWithSM2(context.Background(), node.Concept, score); err != nil {
+				log.Printf("更新知识点掌握度失败 [%s]: %v", node.Concept, err)
+			}
+		}
+	}
 }

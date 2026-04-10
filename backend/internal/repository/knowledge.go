@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/nothasson/MindFlow/backend/internal/review"
 )
 
 // KnowledgeNode 知识点节点
@@ -224,4 +226,45 @@ func (r *KnowledgeRepo) GetWeakPoints(ctx context.Context, limit int) ([]ReviewI
 		return nil, err
 	}
 	return items, nil
+}
+
+// UpdateMasteryWithSM2 使用 SM-2 算法评分更新知识点掌握度
+func (r *KnowledgeRepo) UpdateMasteryWithSM2(ctx context.Context, concept string, score int) error {
+	var ef float64
+	var intervalDays, repetitions int
+	err := r.pool.QueryRow(ctx,
+		`SELECT easiness_factor, interval_days, repetitions FROM knowledge_mastery WHERE concept = $1`,
+		concept,
+	).Scan(&ef, &intervalDays, &repetitions)
+	if err != nil {
+		return err
+	}
+
+	item := &review.ReviewItem{
+		ConceptID:      concept,
+		EasinessFactor: ef,
+		Interval:       intervalDays,
+		Repetitions:    repetitions,
+	}
+	updated := item.Review(score)
+
+	confidenceMap := map[int]float64{5: 1.0, 4: 0.85, 3: 0.7, 2: 0.4, 1: 0.2, 0: 0.0}
+	newConfidence := confidenceMap[score]
+
+	_, err = r.pool.Exec(ctx,
+		`UPDATE knowledge_mastery
+		 SET confidence = $1, easiness_factor = $2, interval_days = $3, repetitions = $4,
+		     next_review = $5, last_reviewed = NOW(), updated_at = NOW()
+		 WHERE concept = $6`,
+		newConfidence, updated.EasinessFactor, updated.Interval, updated.Repetitions,
+		time.Now().AddDate(0, 0, updated.Interval), concept,
+	)
+	return err
+}
+
+// DeleteByConcept 删除指定知识点（含关系）
+func (r *KnowledgeRepo) DeleteByConcept(ctx context.Context, concept string) error {
+	_, _ = r.pool.Exec(ctx, `DELETE FROM knowledge_relations WHERE from_concept = $1 OR to_concept = $1`, concept)
+	_, err := r.pool.Exec(ctx, `DELETE FROM knowledge_mastery WHERE concept = $1`, concept)
+	return err
 }

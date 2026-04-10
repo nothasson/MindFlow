@@ -95,7 +95,7 @@ func main() {
 	courseware := agent.NewCoursewareAgent(chatModel)
 
 	// 初始化 Handler
-	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo)
+	chatHandler := handler.NewChatHandler(orchestrator, convRepo, msgRepo, knowledgeRepo)
 	convHandler := handler.NewConversationHandler(convRepo, msgRepo)
 	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)
@@ -158,6 +158,9 @@ func main() {
 	// 知识图谱路由
 	h.GET("/api/knowledge/graph", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.Graph(ctx, c)
+	})
+	h.DELETE("/api/knowledge/concept/:name", func(ctx context.Context, c *app.RequestContext) {
+		knowledgeHandler.DeleteConcept(ctx, c)
 	})
 
 	// 记忆系统路由
