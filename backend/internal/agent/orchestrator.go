@@ -82,6 +82,16 @@ func (o *Orchestrator) SetContentAgent(content *ContentAgent) {
 	o.content = content
 }
 
+// SetTeachingStyle 设置教学风格
+func (o *Orchestrator) SetTeachingStyle(style TeachingStyle) {
+	o.tutor.SetStyle(style)
+}
+
+// SetDifficultyLevel 设置掌握度级别
+func (o *Orchestrator) SetDifficultyLevel(level DifficultyLevel) {
+	o.tutor.SetLevel(level)
+}
+
 // Chat 根据路由决策调度对话（非流式）
 func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (string, error) {
 	decision, _ := o.Route(ctx, messages)

@@ -22,6 +22,8 @@ type ChatRequest struct {
 	ConversationID string       `json:"conversation_id,omitempty"`
 	Messages       []MessageDTO `json:"messages"`
 	Stream         bool         `json:"stream,omitempty"`
+	Style          string       `json:"style,omitempty"`
+	Level          string       `json:"level,omitempty"`
 }
 
 // MessageDTO 消息传输对象
@@ -95,6 +97,14 @@ func (h *ChatHandler) Handle(ctx context.Context, c *app.RequestContext) {
 			Role:    schema.RoleType(m.Role),
 			Content: m.Content,
 		})
+	}
+
+	// 应用教学风格和掌握度级别
+	if req.Style != "" {
+		h.orchestrator.SetTeachingStyle(agent.TeachingStyle(req.Style))
+	}
+	if req.Level != "" {
+		h.orchestrator.SetDifficultyLevel(agent.DifficultyLevel(req.Level))
 	}
 
 	if req.Stream {

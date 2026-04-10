@@ -99,6 +99,7 @@ func main() {
 	resourceHandler := handler.NewResourceHandler(aiClient, resourceRepo, knowledgeRepo)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeRepo)
 	courseHandler := handler.NewCourseHandler(courseRepo, resourceRepo, courseware)
+	dashboardHandler := handler.NewDashboardHandler(convRepo, msgRepo, resourceRepo, courseRepo)
 
 	// 创建 Hertz 服务器
 	h := server.Default(server.WithHostPorts(":" + cfg.Port))
@@ -177,6 +178,11 @@ func main() {
 	})
 	h.DELETE("/api/courses/:id", func(ctx context.Context, c *app.RequestContext) {
 		courseHandler.Delete(ctx, c)
+	})
+
+	// 仪表盘路由
+	h.GET("/api/dashboard/stats", func(ctx context.Context, c *app.RequestContext) {
+		dashboardHandler.Stats(ctx, c)
 	})
 
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)

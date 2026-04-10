@@ -101,6 +101,7 @@ MindFlow/
 
 | 日期 | 类型 | 说明 |
 |------|------|------|
+| 2026-04-10 | feat | P5 Phase 3-5：个性化教学风格、仪表盘真实数据 API、测验与错题本数据模型 |
 | 2026-04-10 | feat | P5 Phase 0：资料上传接入 resources 持久化、Qdrant 向量入库与知识点提取，资料页展示真实资源状态 |
 | 2026-04-09 | fix | AI 服务改为轻量本地 embedding 实现，移除 sentence-transformers/torch，显著降低本地 Docker 启动成本 |
 | 2026-04-09 | feat | P3 出题和复习：Quiz/Review/Curriculum Agent + Orchestrator 路由分发 |
