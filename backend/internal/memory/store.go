@@ -30,6 +30,11 @@ func NewStore(baseDir string) (*Store, error) {
 	return &Store{baseDir: baseDir}, nil
 }
 
+// GetBaseDir 返回记忆根目录
+func (s *Store) GetBaseDir() string {
+	return s.baseDir
+}
+
 // GetLongTermMemory 读取 MEMORY.md（L0+L1 层）
 func (s *Store) GetLongTermMemory() (string, error) {
 	path := filepath.Join(s.baseDir, "MEMORY.md")

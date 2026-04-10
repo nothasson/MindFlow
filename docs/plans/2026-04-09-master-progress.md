@@ -132,7 +132,7 @@
 
 > 目标：产品化和可扩展性
 
-- [ ] **记忆页**（/memory）
+- [x] **记忆页**（/memory）
   - 学习画像概览（从 MEMORY.md 解析）
   - 每日学习日志时间线（memory/YYYY-MM-DD.md）
   - 精华总结（learnings/）

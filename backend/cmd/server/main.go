@@ -70,6 +70,7 @@ func main() {
 	}
 
 	// 初始化记忆系统和 Dreaming Sweep
+	var memHandler *handler.MemoryHandler
 	memStore, err := memory.NewStore(cfg.MemoryDir)
 	if err != nil {
 		log.Printf("警告: 记忆系统初始化失败: %v", err)
@@ -77,6 +78,8 @@ func main() {
 		memAgent := agent.NewMemoryAgent(chatModel, memStore)
 		orchestrator.SetMemoryAgent(memAgent)
 		log.Println("记忆系统已启用")
+
+		memHandler = handler.NewMemoryHandler(memStore)
 
 		// 启动 Dreaming Sweep 每日定时任务
 		sweep := memory.NewDreamingSweep(memStore, chatModel)
@@ -143,6 +146,19 @@ func main() {
 	h.GET("/api/knowledge/graph", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.Graph(ctx, c)
 	})
+
+	// 记忆系统路由
+	if memHandler != nil {
+		h.GET("/api/memory/profile", func(ctx context.Context, c *app.RequestContext) {
+			memHandler.Profile(ctx, c)
+		})
+		h.GET("/api/memory/timeline", func(ctx context.Context, c *app.RequestContext) {
+			memHandler.Timeline(ctx, c)
+		})
+		h.GET("/api/memory/search", func(ctx context.Context, c *app.RequestContext) {
+			memHandler.Search(ctx, c)
+		})
+	}
 
 	// 开发测试：回声接口，逐字流式返回用户内容，用于测试 Markdown/Mermaid 渲染和打字机效果
 	h.POST("/api/echo", func(ctx context.Context, c *app.RequestContext) {
