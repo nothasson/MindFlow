@@ -376,6 +376,14 @@ export default function KnowledgePage() {
 
             <button
               type="button"
+              onClick={() => router.push(`/quiz?concept=${encodeURIComponent(selected.concept)}`)}
+              className="mt-1 flex w-full items-center justify-center rounded-lg border border-[#C67A4A] px-4 py-2 text-sm text-[#C67A4A] transition hover:bg-[#C67A4A]/10"
+            >
+              出题测验
+            </button>
+
+            <button
+              type="button"
               onClick={async () => {
                 if (!confirm(`确定删除知识点「${selected.concept}」？`)) return;
                 try {

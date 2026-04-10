@@ -82,7 +82,7 @@ def _extract_with_llm(text: str) -> list[dict]:
 
 
 def _extract_json_array(content: str) -> str:
-    match = re.search(r"\[[\s\S]*?\]", content)
+    match = re.search(r"\[[\s\S]*\]", content)
     if match:
         return match.group(0)
     return content

@@ -102,6 +102,9 @@ func main() {
 	courseHandler := handler.NewCourseHandler(courseRepo, resourceRepo, courseware)
 	dashboardHandler := handler.NewDashboardHandler(convRepo, msgRepo, resourceRepo, courseRepo, knowledgeRepo)
 	reviewHandler := handler.NewReviewHandler(knowledgeRepo)
+	memoryPageHandler := handler.NewMemoryPageHandler(convRepo, msgRepo, knowledgeRepo)
+	quizRepo := repository.NewQuizRepo(db)
+	quizHandler := handler.NewQuizHandler(agent.NewQuizAgent(chatModel), knowledgeRepo, quizRepo)
 
 	// 创建 Hertz 服务器
 	h := server.Default(
@@ -176,6 +179,17 @@ func main() {
 		})
 	}
 
+	// 记忆页数据路由
+	h.GET("/api/conversations/recent", func(ctx context.Context, c *app.RequestContext) {
+		memoryPageHandler.RecentConversations(ctx, c)
+	})
+	h.GET("/api/knowledge/recent", func(ctx context.Context, c *app.RequestContext) {
+		memoryPageHandler.KnowledgeRecent(ctx, c)
+	})
+	h.GET("/api/stats/calendar", func(ctx context.Context, c *app.RequestContext) {
+		memoryPageHandler.CalendarStats(ctx, c)
+	})
+
 	// 开发测试：回声接口，逐字流式返回用户内容，用于测试 Markdown/Mermaid 渲染和打字机效果
 	h.POST("/api/echo", func(ctx context.Context, c *app.RequestContext) {
 		handler.HandleEcho(ctx, c)
@@ -206,6 +220,14 @@ func main() {
 	})
 	h.GET("/api/review/upcoming", func(ctx context.Context, c *app.RequestContext) {
 		reviewHandler.Upcoming(ctx, c)
+	})
+
+	// 答题路由
+	h.POST("/api/quiz/generate", func(ctx context.Context, c *app.RequestContext) {
+		quizHandler.Generate(ctx, c)
+	})
+	h.POST("/api/quiz/submit", func(ctx context.Context, c *app.RequestContext) {
+		quizHandler.Submit(ctx, c)
 	})
 
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)

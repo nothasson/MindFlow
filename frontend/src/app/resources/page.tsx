@@ -1,16 +1,20 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
 import { importUrlResource, uploadResource } from "@/lib/api";
 import type { ResourceUploadResult } from "@/lib/types";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export default function ResourcesPage() {
   const [uploading, setUploading] = useState(false);
   const [urlValue, setUrlValue] = useState("");
   const [result, setResult] = useState<ResourceUploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   const applyResult = useCallback((data: ResourceUploadResult) => {
     setResult(data);
@@ -161,6 +165,42 @@ export default function ResourcesPage() {
                   </div>
                 </div>
               ) : null}
+
+              {/* 操作按钮 */}
+              <div className="mb-4 flex gap-3">
+                <Link
+                  href={`/?q=${encodeURIComponent(result.filename)}`}
+                  className="rounded-lg bg-[#C67A4A] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a]"
+                >
+                  基于此资料学习
+                </Link>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setGenerating(true);
+                    try {
+                      const res = await fetch(`${API_URL}/api/resources/${result.resource_id}/generate-course`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ difficulty: "beginner" }),
+                      });
+                      if (!res.ok) throw new Error("生成失败");
+                      const data = await res.json();
+                      if (data.course?.id) {
+                        window.location.href = `/courses/${data.course.id}`;
+                      }
+                    } catch {
+                      setError("课程生成失败，请重试");
+                    } finally {
+                      setGenerating(false);
+                    }
+                  }}
+                  disabled={generating}
+                  className="rounded-lg border border-stone-200 px-4 py-2 text-sm text-stone-700 transition hover:bg-stone-100 disabled:text-stone-400"
+                >
+                  {generating ? "生成中..." : "生成章节课程"}
+                </button>
+              </div>
 
               <div className="max-h-96 overflow-y-auto rounded-xl bg-stone-50 p-4 text-sm text-stone-700">
                 <pre className="whitespace-pre-wrap">{result.text.slice(0, 3000)}</pre>

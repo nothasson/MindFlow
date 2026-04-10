@@ -26,6 +26,7 @@ type ChatRequest struct {
 	Stream         bool         `json:"stream,omitempty"`
 	Style          string       `json:"style,omitempty"`
 	Level          string       `json:"level,omitempty"`
+	Concept        string       `json:"concept,omitempty"` // 当前学习的概念（从知识图谱跳转时传入）
 }
 
 // MessageDTO 消息传输对象
@@ -208,8 +209,8 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 					}
 
 					// 记录学习日志
+					lastUserMsg := ""
 					if len(messages) > 0 {
-						lastUserMsg := ""
 						for i := len(messages) - 1; i >= 0; i-- {
 							if messages[i].Role == "user" {
 								lastUserMsg = messages[i].Content
@@ -217,11 +218,6 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 							}
 						}
 						h.orchestrator.RecordMemory(lastUserMsg, fullContent.String())
-
-					// 更新相关知识点的掌握度（对话即学习，默认评 3 分 = "困难但正确"）
-					if h.knowledgeRepo != nil {
-						h.updateRelatedMastery(lastUserMsg, 3)
-					}
 					}
 
 					data, _ := json.Marshal(SSEData{Done: true})
@@ -243,25 +239,4 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 	}()
 
 	<-done
-}
-
-// updateRelatedMastery 更新用户消息中提到的知识点掌握度
-func (h *ChatHandler) updateRelatedMastery(userMsg string, score int) {
-	if h.knowledgeRepo == nil {
-		return
-	}
-
-	// 获取所有知识点，检查用户消息是否涉及
-	nodes, err := h.knowledgeRepo.ListNodes(context.Background())
-	if err != nil {
-		return
-	}
-
-	for _, node := range nodes {
-		if strings.Contains(userMsg, node.Concept) {
-			if err := h.knowledgeRepo.UpdateMasteryWithSM2(context.Background(), node.Concept, score); err != nil {
-				log.Printf("更新知识点掌握度失败 [%s]: %v", node.Concept, err)
-			}
-		}
-	}
 }
