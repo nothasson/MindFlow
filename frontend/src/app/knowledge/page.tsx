@@ -14,9 +14,9 @@ interface SimNode extends KnowledgeNode {
 }
 
 function confidenceColor(confidence: number): string {
-  if (confidence >= 0.8) return "#22c55e"; // green
-  if (confidence >= 0.4) return "#eab308"; // yellow
-  return "#ef4444"; // red
+  if (confidence >= 0.8) return "#6b8e6b"; // 柔和绿
+  if (confidence >= 0.4) return "#c4a54a"; // 柔和黄
+  return "#c07060"; // 柔和红
 }
 
 function confidenceLabel(confidence: number): string {
@@ -205,15 +205,15 @@ export default function KnowledgePage() {
           </p>
           <div className="mt-6 flex justify-center gap-6 text-xs text-stone-400">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
+              <span className="inline-block h-3 w-3 rounded-full" style={{backgroundColor: "#6b8e6b"}} />
               已掌握
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full bg-yellow-500" />
+              <span className="inline-block h-3 w-3 rounded-full" style={{backgroundColor: "#c4a54a"}} />
               学习中
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
+              <span className="inline-block h-3 w-3 rounded-full" style={{backgroundColor: "#c07060"}} />
               薄弱
             </span>
           </div>
@@ -227,15 +227,15 @@ export default function KnowledgePage() {
           <h1 className="text-lg font-semibold text-stone-800">知识图谱</h1>
           <div className="mt-2 flex gap-4 text-xs text-stone-500">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{backgroundColor: "#6b8e6b"}} />
               已掌握
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-yellow-500" />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{backgroundColor: "#c4a54a"}} />
               学习中
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{backgroundColor: "#c07060"}} />
               薄弱
             </span>
           </div>
@@ -258,9 +258,9 @@ export default function KnowledgePage() {
               y1={300}
               x2={400}
               y2={300}
-              stroke="#a8a29e"
-              strokeWidth={1.5}
-              strokeOpacity={0.5}
+              stroke="#c8c4b8"
+              strokeWidth={1}
+              strokeOpacity={0.6}
             />
           ))}
           {/* Nodes */}
@@ -276,7 +276,7 @@ export default function KnowledgePage() {
                 r={Math.max(18, 12 + n.repetitions * 2)}
                 fill={confidenceColor(n.confidence)}
                 fillOpacity={0.85}
-                stroke={selected?.id === n.id ? "#292524" : "white"}
+                stroke={selected?.id === n.id ? "#57534e" : "#EEECE2"}
                 strokeWidth={selected?.id === n.id ? 2.5 : 1.5}
               />
               <text
@@ -361,6 +361,13 @@ export default function KnowledgePage() {
               <p className="text-xs text-stone-400">难度因子</p>
               <p className="mt-0.5 text-stone-700">{selected.easiness_factor.toFixed(2)}</p>
             </div>
+
+            <a
+              href={`/?q=${encodeURIComponent(selected.concept)}`}
+              className="mt-2 flex w-full items-center justify-center rounded-lg bg-[#C67A4A] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a]"
+            >
+              开始学习「{selected.concept}」
+            </a>
 
             {/* Related concepts */}
             {edges.filter((e) => e.from === selected.concept || e.to === selected.concept).length > 0 && (
