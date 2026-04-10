@@ -199,6 +199,13 @@
 - [x] 侧栏"新建对话/删除当前会话"未同步清理 URL 参数 → MainShell 已统一处理
 - [x] 前端 Suspense 包裹 → layout.tsx 全局 Suspense
 
+> 新发现待处理
+
+- [ ] `/api/settings/provider` 可被任意前端用户切换全局 LLM provider → 至少限制为管理员/本地开发使用，或改成按用户/会话维度存储
+- [ ] `docker-compose.yml` 将 `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_WS_URL` 硬编码为 `localhost` → 远程部署前端会回连用户本机，需改为可配置公网地址或相对路径
+- [ ] `README.md` / `docker-compose.yml` / `backend/internal/config/config.go` 的 `LLM_MODEL` 默认值不一致 → 统一文档、Compose 与代码默认模型
+- [ ] `CODEX_MODEL` / `CORS_ORIGINS` 配置链路不完整 → 补齐 `.env.example` 与 `docker-compose.yml` 环境变量透传
+
 ---
 
 ## 四、相关设计文档索引

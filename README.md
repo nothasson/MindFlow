@@ -344,7 +344,8 @@ cp .env.example .env
 
 # （可选）如果要用 Codex Provider，确保已运行 codex login
 
-docker compose up -d
+# 部署模式：只加载主 compose 文件，不挂载本地源码
+docker compose -f docker-compose.yml up -d
 
 # 访问
 # 前端：http://localhost:3000
@@ -354,8 +355,11 @@ docker compose up -d
 
 ### 本地开发
 
+> **注意：本地开发不要使用 `docker compose -f docker-compose.yml up -d`。**
+> 该命令会绕过 `docker-compose.override.yml`，导致源码目录不会挂载进容器，改代码后不会热更新，容易误以为“代码没有同步到 Docker”。
+
 ```bash
-# 开发模式（源码挂载，HMR 热重载）
+# 开发模式（自动加载 docker-compose.override.yml，源码挂载 + HMR 热重载）
 docker compose up -d
 
 # 查看日志
@@ -464,8 +468,9 @@ MindFlow/
 |------|------|--------|
 | `LLM_API_KEY` | LLM API Key | （必填） |
 | `LLM_BASE_URL` | LLM API 地址 | `https://api.siliconflow.cn/v1` |
-| `LLM_MODEL` | 模型名 | `Pro/zai-org/GLM-5.1` |
+| `LLM_MODEL` | 模型名 | `Pro/MiniMaxAI/MiniMax-M2.5` |
 | `CODEX_MODEL` | Codex 模型名 | `gpt-5.4` |
+| `CORS_ORIGINS` | 允许的前端来源列表（逗号分隔） | `http://localhost:3000,http://127.0.0.1:3000` |
 | `POSTGRES_USER` | PostgreSQL 用户名 | `mindflow` |
 | `POSTGRES_PASSWORD` | PostgreSQL 密码 | `mindflow_dev` |
 | `POSTGRES_DB` | PostgreSQL 数据库名 | `mindflow` |
@@ -487,6 +492,7 @@ MindFlow/
 | 原子写入 + 并发锁 | 防止 Memory Agent 和 Dreaming Sweep 竞态写坏文件 |
 | LLM 语义路由 | 关键词规则不够灵活，让 LLM 判断用户意图更准 |
 | docker-compose 分离 | 开发挂载源码 HMR，部署走镜像构建 |
+| CORS 来源可配置 | 默认允许本地前端地址，也可通过 `CORS_ORIGINS` 覆盖 |
 
 ---
 

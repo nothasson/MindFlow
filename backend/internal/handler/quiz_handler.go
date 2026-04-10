@@ -12,18 +12,20 @@ import (
 
 	"github.com/nothasson/MindFlow/backend/internal/agent"
 	"github.com/nothasson/MindFlow/backend/internal/repository"
+	"github.com/nothasson/MindFlow/backend/internal/review"
 )
 
 // QuizHandler 答题 API 处理器
 type QuizHandler struct {
 	quiz          *agent.QuizAgent
+	variantQuiz   *agent.VariantQuizAgent
 	knowledgeRepo *repository.KnowledgeRepo
 	quizRepo      *repository.QuizRepo
 }
 
 // NewQuizHandler 创建答题处理器
-func NewQuizHandler(quiz *agent.QuizAgent, knowledgeRepo *repository.KnowledgeRepo, quizRepo *repository.QuizRepo) *QuizHandler {
-	return &QuizHandler{quiz: quiz, knowledgeRepo: knowledgeRepo, quizRepo: quizRepo}
+func NewQuizHandler(quiz *agent.QuizAgent, variantQuiz *agent.VariantQuizAgent, knowledgeRepo *repository.KnowledgeRepo, quizRepo *repository.QuizRepo) *QuizHandler {
+	return &QuizHandler{quiz: quiz, variantQuiz: variantQuiz, knowledgeRepo: knowledgeRepo, quizRepo: quizRepo}
 }
 
 // Generate POST /api/quiz/generate — 给定概念出题
@@ -77,30 +79,78 @@ func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 	evalCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	score, err := h.quiz.EvaluateAnswer(evalCtx, req.Question, req.Answer)
+	score, explanation, err := h.quiz.EvaluateAnswer(evalCtx, req.Question, req.Answer)
 	if err != nil {
 		log.Printf("LLM 评分失败，使用默认分数: %v", err)
 		score = 3
+		explanation = ""
 	}
 	isCorrect := score >= 3
 
 	// 记录答题
 	if h.quizRepo != nil {
-		if _, err := h.quizRepo.CreateAttempt(ctx, nil, nil, req.Question, req.Answer, isCorrect, score, ""); err != nil {
-			log.Printf("记录答题失败: %v", err)
+		attempt, createErr := h.quizRepo.CreateAttempt(ctx, nil, nil, req.Question, req.Answer, isCorrect, score, explanation)
+		if createErr != nil {
+			log.Printf("记录答题失败: %v", createErr)
+		} else if !isCorrect && attempt != nil && req.Concept != "" {
+			// 答错自动写入错题本
+			errorType := "method_error" // 默认错误类型，后续可由诊断 Agent 细化
+			if score <= 1 {
+				errorType = "concept_error"
+			}
+			if wbErr := h.quizRepo.CreateWrongBookEntry(ctx, attempt.ID, req.Concept, errorType); wbErr != nil {
+				log.Printf("写入错题本失败: %v", wbErr)
+			}
 		}
 	}
 
-	// 更新遗忘曲线掌握度
+	// 更新遗忘曲线掌握度（FSRS 算法）
 	if h.knowledgeRepo != nil && req.Concept != "" {
-		if err := h.knowledgeRepo.UpdateMasteryWithSM2(ctx, req.Concept, score); err != nil {
+		rating := review.ScoreToRating(score)
+		if err := h.knowledgeRepo.UpdateMasteryWithFSRS(ctx, req.Concept, rating); err != nil {
 			log.Printf("更新掌握度失败: %v", err)
 		}
 	}
 
 	c.JSON(http.StatusOK, utils.H{
-		"is_correct": isCorrect,
-		"score":      score,
-		"concept":    req.Concept,
+		"is_correct":  isCorrect,
+		"score":       score,
+		"explanation": explanation,
+		"concept":     req.Concept,
+	})
+}
+
+// GenerateVariant POST /api/quiz/variant — 根据错题生成变式题
+func (h *QuizHandler) GenerateVariant(ctx context.Context, c *app.RequestContext) {
+	var req struct {
+		Concept    string `json:"concept"`
+		Question   string `json:"question"`
+		UserAnswer string `json:"user_answer"`
+		ErrorType  string `json:"error_type"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "请求格式错误"})
+		return
+	}
+	if req.Concept == "" || req.Question == "" {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "请提供概念和原题"})
+		return
+	}
+	if req.ErrorType == "" {
+		req.ErrorType = "method_error"
+	}
+
+	genCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	result, err := h.variantQuiz.Generate(genCtx, req.Concept, req.Question, req.UserAnswer, req.ErrorType)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "变式题生成失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, utils.H{
+		"concept": req.Concept,
+		"variant": result,
 	})
 }

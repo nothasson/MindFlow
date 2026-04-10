@@ -20,7 +20,6 @@ type ProviderInfo struct {
 }
 
 // ModelSwitch 是一个 ChatModel 代理，可在运行时切换底层实现。
-// Orchestrator 和所有 Agent 持有它的引用，切换 provider 时它们无感知。
 type ModelSwitch struct {
 	mu       sync.RWMutex
 	active   string                     // 当前激活的 provider id
@@ -83,13 +82,25 @@ func (s *ModelSwitch) current() model.ChatModel {
 // --- 实现 model.ChatModel 接口，转发到当前 active 的 model ---
 
 func (s *ModelSwitch) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
-	return s.current().Generate(ctx, input, opts...)
+	cur := s.current()
+	if cur == nil {
+		return nil, fmt.Errorf("没有可用的 LLM provider")
+	}
+	return cur.Generate(ctx, input, opts...)
 }
 
 func (s *ModelSwitch) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	return s.current().Stream(ctx, input, opts...)
+	cur := s.current()
+	if cur == nil {
+		return nil, fmt.Errorf("没有可用的 LLM provider")
+	}
+	return cur.Stream(ctx, input, opts...)
 }
 
 func (s *ModelSwitch) BindTools(tools []*schema.ToolInfo) error {
-	return s.current().BindTools(tools)
+	cur := s.current()
+	if cur == nil {
+		return fmt.Errorf("没有可用的 LLM provider")
+	}
+	return cur.BindTools(tools)
 }

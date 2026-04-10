@@ -53,6 +53,7 @@ type SSEData struct {
 // ChatAIClient 抽象 AI 微服务能力，用于对话后提取知识点。
 type ChatAIClient interface {
 	ExtractKnowledgePoints(text string) (*service.ExtractResponse, error)
+	ExtractKnowledgePointsWithContext(text string, existingConcepts []string) (*service.ExtractResponse, error)
 }
 
 // ChatHandler 对话 HTTP 处理器
@@ -277,11 +278,17 @@ func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string) {
 
 	// 合并用户问题和 AI 回复作为提取上下文
 	text := userMsg + "\n\n" + assistantMsg
-	if len([]rune(text)) < 20 {
+	if len([]rune(text)) < 50 {
 		return // 内容太短，不提取
 	}
 
-	extractResult, err := h.aiClient.ExtractKnowledgePoints(text)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// 查询已有概念名称，传给 LLM 做去重
+	existingNames, _ := h.knowledgeRepo.ListConceptNames(ctx)
+
+	extractResult, err := h.aiClient.ExtractKnowledgePointsWithContext(text, existingNames)
 	if err != nil {
 		log.Printf("对话知识点提取失败: %v", err)
 		return
@@ -292,19 +299,29 @@ func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string) {
 		if point.Concept == "" {
 			continue
 		}
+		// 转换 relations
+		rels := make([]repository.ExtractedRelation, 0, len(point.Relations))
+		for _, r := range point.Relations {
+			rels = append(rels, repository.ExtractedRelation{
+				Target:   r.Target,
+				Type:     r.Type,
+				Strength: r.Strength,
+			})
+		}
 		points = append(points, repository.ExtractedKnowledgePoint{
 			Concept:       point.Concept,
 			Description:   point.Description,
 			Prerequisites: point.Prerequisites,
+			BloomLevel:    point.BloomLevel,
+			Importance:    point.Importance,
+			Granularity:   point.Granularity,
+			Relations:     rels,
 		})
 	}
 
 	if len(points) == 0 {
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 
 	if err := h.knowledgeRepo.UpsertExtractedPoints(ctx, points); err != nil {
 		log.Printf("对话知识点写入知识图谱失败: %v", err)

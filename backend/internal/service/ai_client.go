@@ -92,14 +92,26 @@ type SearchResponse struct {
 
 // ExtractRequest 知识点提取请求。
 type ExtractRequest struct {
-	Text string `json:"text"`
+	Text             string   `json:"text"`
+	ExistingConcepts []string `json:"existing_concepts,omitempty"`
+}
+
+// KnowledgeRelation 知识点关系。
+type KnowledgeRelation struct {
+	Target   string  `json:"target"`
+	Type     string  `json:"type"`
+	Strength float64 `json:"strength"`
 }
 
 // KnowledgePoint 提取出的知识点。
 type KnowledgePoint struct {
-	Concept       string   `json:"concept"`
-	Description   string   `json:"description"`
-	Prerequisites []string `json:"prerequisites"`
+	Concept       string              `json:"concept"`
+	Description   string              `json:"description"`
+	Prerequisites []string            `json:"prerequisites"`
+	BloomLevel    string              `json:"bloom_level"`
+	Importance    float64             `json:"importance"`
+	Granularity   int                 `json:"granularity"`
+	Relations     []KnowledgeRelation `json:"relations"`
 }
 
 // ExtractResponse 知识点提取响应。
@@ -187,7 +199,12 @@ func (c *AIClient) Search(query, collection string, limit int) (*SearchResponse,
 
 // ExtractKnowledgePoints 提取资料中的知识点。
 func (c *AIClient) ExtractKnowledgePoints(text string) (*ExtractResponse, error) {
-	body := ExtractRequest{Text: text}
+	return c.ExtractKnowledgePointsWithContext(text, nil)
+}
+
+// ExtractKnowledgePointsWithContext 提取知识点，传入已有概念用于去重。
+func (c *AIClient) ExtractKnowledgePointsWithContext(text string, existingConcepts []string) (*ExtractResponse, error) {
+	body := ExtractRequest{Text: text, ExistingConcepts: existingConcepts}
 	var result ExtractResponse
 	if err := c.postJSON("/extract", body, &result); err != nil {
 		return nil, fmt.Errorf("知识点提取失败: %w", err)

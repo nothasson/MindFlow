@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -9,22 +9,61 @@ import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
+interface WeakPoint {
+  concept: string;
+  confidence: number;
+}
+
 export default function QuizPage() {
   const searchParams = useSearchParams();
-  const concept = searchParams?.get("concept") ?? "";
+  const urlConcept = searchParams?.get("concept") ?? "";
 
+  const [concept, setConcept] = useState(urlConcept);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [questions, setQuestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState("");
-  const [result, setResult] = useState<{ score: number; is_correct: boolean } | null>(null);
+  const [result, setResult] = useState<{ score: number; is_correct: boolean; explanation?: string } | null>(null);
   const [scores, setScores] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // 薄弱知识点列表（自动推荐用）
+  const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
+  const [loadingWeak, setLoadingWeak] = useState(true);
+
+  // 进入页面时自动加载薄弱知识点
+  useEffect(() => {
+    if (urlConcept) {
+      setConcept(urlConcept);
+      setLoadingWeak(false);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/dashboard/stats`);
+        if (!res.ok) throw new Error("获取失败");
+        const data = await res.json();
+        const points: WeakPoint[] = (data.weak_points ?? []).map((p: { concept: string; confidence: number }) => ({
+          concept: p.concept,
+          confidence: p.confidence,
+        }));
+        setWeakPoints(points);
+        // 自动选择最薄弱的概念
+        if (points.length > 0) {
+          setConcept(points[0].concept);
+        }
+      } catch {
+        // 获取失败不阻塞页面
+      } finally {
+        setLoadingWeak(false);
+      }
+    })();
+  }, [urlConcept]);
 
   // 解析 LLM 返回的多题文本为单题数组
   const parseQuestions = (text: string): string[] => {
-    // 按 "### 题目" 或 "**题目" 分割
     const parts = text.split(/(?=###\s*题目|(?:^|\n)\*\*题目)/);
     const filtered = parts.filter((p) => p.trim().length > 20);
     return filtered.length > 0 ? filtered : [text];
@@ -55,8 +94,9 @@ export default function QuizPage() {
   }, [concept]);
 
   const submitAnswer = useCallback(async () => {
-    if (!answer.trim()) return;
+    if (!answer.trim() || submitting) return;
     setError(null);
+    setSubmitting(true);
     try {
       const res = await fetch(`${API_URL}/api/quiz/submit`, {
         method: "POST",
@@ -73,8 +113,10 @@ export default function QuizPage() {
       setScores((prev) => [...prev, data.score]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "提交失败");
+    } finally {
+      setSubmitting(false);
     }
-  }, [concept, questions, currentIndex, answer]);
+  }, [concept, questions, currentIndex, answer, submitting]);
 
   const nextQuestion = () => {
     if (currentIndex + 1 >= questions.length) {
@@ -86,6 +128,19 @@ export default function QuizPage() {
     }
   };
 
+  const resetQuiz = () => {
+    setQuestions([]);
+    setScores([]);
+    setAnswer("");
+    setResult(null);
+    setFinished(false);
+  };
+
+  const switchConcept = (newConcept: string) => {
+    setConcept(newConcept);
+    resetQuiz();
+  };
+
   const avgScore = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : "0";
 
   return (
@@ -93,31 +148,73 @@ export default function QuizPage() {
       <div className="flex h-full flex-col bg-[#EEECE2]">
         <div className="mx-auto w-full max-w-3xl overflow-y-auto px-4 py-12">
           <h1 className="mb-2 text-2xl font-semibold text-stone-800">知识测验</h1>
-          <p className="mb-8 text-sm text-stone-500">
-            {concept ? `测验主题：${concept}` : "请从知识图谱选择一个概念开始测验"}
-          </p>
 
-          {!concept ? (
+          {loadingWeak ? (
+            <p className="text-sm text-stone-400">正在分析你的学习状态...</p>
+          ) : !concept && weakPoints.length === 0 ? (
+            /* 没有任何知识点 */
             <div className="rounded-2xl border border-stone-200 bg-white p-6 text-center">
-              <p className="mb-4 text-stone-500">请先从知识图谱选择一个概念</p>
+              <p className="mb-2 text-stone-500">还没有知识点数据</p>
+              <p className="mb-4 text-sm text-stone-400">先去学习一些内容，AI 会自动记录你的知识点</p>
               <Link
-                href="/knowledge"
+                href="/"
                 className="rounded-lg bg-stone-800 px-4 py-2 text-sm text-white transition hover:bg-stone-700"
               >
-                前往知识图谱
+                开始学习
               </Link>
             </div>
-          ) : questions.length === 0 ? (
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 text-center">
-              <p className="mb-4 text-stone-500">准备好了吗？AI 将根据「{concept}」逐题出题</p>
-              <button
-                type="button"
-                onClick={generateQuiz}
-                disabled={loading}
-                className="rounded-lg bg-[#C67A4A] px-6 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a] disabled:bg-stone-400"
-              >
-                {loading ? "出题中..." : "开始测验"}
-              </button>
+          ) : questions.length === 0 && !finished ? (
+            /* 准备阶段：展示 AI 推荐 + 可选列表 */
+            <div className="space-y-6">
+              {/* AI 推荐卡片 */}
+              <div className="rounded-2xl border border-stone-200 bg-white p-6">
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="rounded-full bg-[#C67A4A]/10 px-3 py-1 text-xs font-medium text-[#C67A4A]">
+                    AI 推荐
+                  </span>
+                  <span className="text-sm text-stone-500">
+                    根据你的薄弱点自动选择
+                  </span>
+                </div>
+                <p className="mb-1 text-lg font-semibold text-stone-800">{concept}</p>
+                {weakPoints.find((w) => w.concept === concept) && (
+                  <p className="mb-4 text-sm text-stone-400">
+                    掌握度 {Math.round((weakPoints.find((w) => w.concept === concept)?.confidence ?? 0) * 100)}%，需要巩固
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={generateQuiz}
+                  disabled={loading}
+                  className="rounded-lg bg-[#C67A4A] px-6 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a] disabled:bg-stone-400"
+                >
+                  {loading ? "出题中..." : "开始测验"}
+                </button>
+              </div>
+
+              {/* 其他薄弱知识点可选列表 */}
+              {weakPoints.length > 1 && (
+                <div className="rounded-2xl border border-stone-200 bg-white p-6">
+                  <h3 className="mb-3 text-sm font-semibold text-stone-700">其他薄弱知识点</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {weakPoints.map((wp) => (
+                      <button
+                        key={wp.concept}
+                        type="button"
+                        onClick={() => switchConcept(wp.concept)}
+                        className={`rounded-full border px-3 py-1 text-sm transition ${
+                          wp.concept === concept
+                            ? "border-[#C67A4A] bg-[#C67A4A]/10 text-[#C67A4A]"
+                            : "border-stone-200 text-stone-600 hover:border-stone-400"
+                        }`}
+                      >
+                        {wp.concept}
+                        <span className="ml-1 text-xs text-stone-400">{Math.round(wp.confidence * 100)}%</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : finished ? (
             /* 测验完成总结 */
@@ -140,18 +237,12 @@ export default function QuizPage() {
                 </div>
               </div>
               <p className="mb-4 text-sm text-stone-500">
-                掌握度已根据你的表现更新（SM-2 遗忘曲线）。
+                掌握度已根据你的表现自动更新。
               </p>
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    setQuestions([]);
-                    setScores([]);
-                    setAnswer("");
-                    setResult(null);
-                    setFinished(false);
-                  }}
+                  onClick={resetQuiz}
                   className="rounded-lg bg-[#C67A4A] px-4 py-2 text-sm text-white transition hover:bg-[#b06a3a]"
                 >
                   再来一轮
@@ -167,6 +258,7 @@ export default function QuizPage() {
           ) : (
             /* 答题中 */
             <div className="space-y-6">
+              <p className="text-sm text-stone-500">测验主题：{concept}</p>
               {/* 进度 */}
               <div className="flex items-center gap-2 text-sm text-stone-500">
                 <span>第 {currentIndex + 1} / {questions.length} 题</span>
@@ -180,7 +272,7 @@ export default function QuizPage() {
                 </div>
               </div>
 
-              {/* 当前题目（Markdown 渲染） */}
+              {/* 当前题目 */}
               <div className="rounded-2xl border border-stone-200 bg-white p-6">
                 <MarkdownRenderer content={questions[currentIndex] ?? ""} />
               </div>
@@ -194,15 +286,16 @@ export default function QuizPage() {
                     onChange={(e) => setAnswer(e.target.value)}
                     placeholder="写下你的答案..."
                     rows={4}
-                    className="w-full resize-none rounded-xl border border-stone-200 px-4 py-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400"
+                    disabled={submitting}
+                    className="w-full resize-none rounded-xl border border-stone-200 px-4 py-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-stone-400 disabled:bg-stone-50"
                   />
                   <button
                     type="button"
                     onClick={submitAnswer}
-                    disabled={!answer.trim()}
+                    disabled={!answer.trim() || submitting}
                     className="mt-3 rounded-lg bg-stone-800 px-6 py-2 text-sm font-medium text-white transition hover:bg-stone-700 disabled:bg-stone-400"
                   >
-                    提交答案
+                    {submitting ? "评分中，请稍候..." : "提交答案"}
                   </button>
                 </div>
               ) : (
@@ -219,6 +312,12 @@ export default function QuizPage() {
                     </span>
                     <span className="text-sm text-stone-500">得分：{result.score}/5</span>
                   </div>
+                  {result.explanation && (
+                    <div className="mb-4 rounded-xl bg-stone-50 p-4">
+                      <p className="mb-1 text-xs font-medium text-stone-500">💡 解析</p>
+                      <p className="text-sm leading-relaxed text-stone-700">{result.explanation}</p>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={nextQuestion}

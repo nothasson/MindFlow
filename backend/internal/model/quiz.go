@@ -41,6 +41,8 @@ type WrongBookEntry struct {
 	QuizAttemptID uuid.UUID  `json:"quiz_attempt_id"`
 	Concept       string     `json:"concept"`
 	ErrorType     string     `json:"error_type"`
+	Question      string     `json:"question"`      // 原题内容（来自 quiz_attempts）
+	UserAnswer    string     `json:"user_answer"`    // 学生回答（来自 quiz_attempts）
 	Reviewed      bool       `json:"reviewed"`
 	ReviewCount   int        `json:"review_count"`
 	NextReview    *time.Time `json:"next_review,omitempty"`

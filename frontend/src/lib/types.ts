@@ -40,6 +40,9 @@ export interface KnowledgeNode {
   repetitions: number;
   last_reviewed: string;
   next_review: string;
+  bloom_level?: string;
+  importance?: number;
+  description?: string;
 }
 
 export interface KnowledgeEdge {
@@ -47,6 +50,7 @@ export interface KnowledgeEdge {
   from: string;
   relation_type: string;
   to: string;
+  strength?: number;
 }
 
 export interface KnowledgeGraph {

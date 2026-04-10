@@ -54,13 +54,14 @@ func main() {
 	}
 	modelSwitch.Register("siliconflow", "硅基流动", cfg.LLMModel, siliconModel)
 
-	// 注册 Codex（可选，检测 token 文件）
+	// 注册 Codex（可选，检测 token 文件）— 可用时设为默认
 	if llm.CodexIsAvailable() {
 		codexModel := llm.NewCodexProvider(cfg.CodexModel)
 		modelSwitch.Register("codex", "Codex", cfg.CodexModel, codexModel)
-		log.Printf("Codex Provider 已注册 (模型: %s)", cfg.CodexModel)
+		modelSwitch.SetActive("codex")
+		log.Printf("Codex Provider 已注册并设为默认 (模型: %s)", cfg.CodexModel)
 	} else {
-		log.Println("Codex Provider 未注册（未找到 token 文件）")
+		log.Println("Codex Provider 未注册（未找到 token 文件），使用硅基流动")
 	}
 
 	// modelSwitch 实现了 model.ChatModel 接口，所有 Agent 透明使用
@@ -125,7 +126,8 @@ func main() {
 	reviewHandler := handler.NewReviewHandler(knowledgeRepo)
 	memoryPageHandler := handler.NewMemoryPageHandler(convRepo, msgRepo, knowledgeRepo)
 	quizRepo := repository.NewQuizRepo(db)
-	quizHandler := handler.NewQuizHandler(agent.NewQuizAgent(chatModel), knowledgeRepo, quizRepo)
+	quizHandler := handler.NewQuizHandler(agent.NewQuizAgent(chatModel), agent.NewVariantQuizAgent(chatModel), knowledgeRepo, quizRepo)
+	wrongBookHandler := handler.NewWrongBookHandler(quizRepo)
 
 	// 创建 Hertz 服务器
 	h := server.Default(
@@ -272,6 +274,23 @@ func main() {
 	})
 	h.POST("/api/quiz/submit", func(ctx context.Context, c *app.RequestContext) {
 		quizHandler.Submit(ctx, c)
+	})
+	h.POST("/api/quiz/variant", func(ctx context.Context, c *app.RequestContext) {
+		quizHandler.GenerateVariant(ctx, c)
+	})
+
+	// 错题本路由
+	h.GET("/api/wrongbook", func(ctx context.Context, c *app.RequestContext) {
+		wrongBookHandler.List(ctx, c)
+	})
+	h.GET("/api/wrongbook/stats", func(ctx context.Context, c *app.RequestContext) {
+		wrongBookHandler.Stats(ctx, c)
+	})
+	h.POST("/api/wrongbook/:id/review", func(ctx context.Context, c *app.RequestContext) {
+		wrongBookHandler.MarkReviewed(ctx, c)
+	})
+	h.DELETE("/api/wrongbook/:id", func(ctx context.Context, c *app.RequestContext) {
+		wrongBookHandler.Delete(ctx, c)
 	})
 
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)

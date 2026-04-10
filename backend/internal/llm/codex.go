@@ -130,7 +130,27 @@ func (c *CodexProvider) Stream(ctx context.Context, input []*schema.Message, opt
 
 	if resp.StatusCode == 401 {
 		resp.Body.Close()
-		return nil, fmt.Errorf("Codex OAuth token 已过期或无效，请运行 codex login 重新登录")
+		// 清除缓存 token，强制重新获取
+		c.mu.Lock()
+		c.token = nil
+		c.mu.Unlock()
+		// 重试一次
+		retryToken, retryErr := c.getToken()
+		if retryErr != nil {
+			return nil, fmt.Errorf("Codex OAuth token 已过期且刷新失败: %w", retryErr)
+		}
+		req2, _ := http.NewRequestWithContext(ctx, "POST", codexEndpoint, bytes.NewReader(bodyJSON))
+		req2.Header.Set("Authorization", "Bearer "+retryToken.AccessToken)
+		req2.Header.Set("Content-Type", "application/json")
+		resp, err = client.Do(req2)
+		if err != nil {
+			return nil, fmt.Errorf("Codex API 重试请求失败: %w", err)
+		}
+		if resp.StatusCode != 200 {
+			errBody, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("Codex API 重试仍失败 (%d): %s", resp.StatusCode, string(errBody))
+		}
 	}
 	if resp.StatusCode != 200 {
 		errBody, _ := io.ReadAll(resp.Body)
@@ -187,7 +207,7 @@ func tokenExpired(t *CodexToken) bool {
 		exp = parseJWTExpiryMs(t.AccessToken)
 	}
 	if exp == 0 {
-		return false // 无法判断，假设未过期
+		return true // 无法判断，假设过期，强制触发刷新
 	}
 	return time.Now().UnixMilli() >= exp-60*1000
 }

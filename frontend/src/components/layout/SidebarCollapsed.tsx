@@ -10,9 +10,11 @@ const tools = [
   { href: "/resources", label: "资料库", d: "M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 004.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z" },
   { href: "/knowledge", label: "知识图谱", d: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" },
   { href: "/quiz", label: "知识测验", d: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { href: "/wrongbook", label: "错题本", d: "M12 9v2m0 4h.01M5.07 19H19a2 2 0 001.75-2.97L13.75 4a2 2 0 00-3.5 0L3.32 16.03A2 2 0 005.07 19z" },
   { href: "/memory", label: "学习历程", d: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
   { href: "/dashboard", label: "学习仪表盘", d: "M3 3v18h18M9 17V9m4 8V5m4 12v-4" },
   { href: "/review", label: "复习计划", d: "M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" },
+  { href: "/settings", label: "设置", d: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
 ];
 
 export function SidebarCollapsed({ onExpand, onNewChat }: SidebarCollapsedProps) {

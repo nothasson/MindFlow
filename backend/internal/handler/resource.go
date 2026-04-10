@@ -221,10 +221,22 @@ func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestCont
 			if point.Concept == "" {
 				continue
 			}
+			rels := make([]repository.ExtractedRelation, 0, len(point.Relations))
+			for _, r := range point.Relations {
+				rels = append(rels, repository.ExtractedRelation{
+					Target:   r.Target,
+					Type:     r.Type,
+					Strength: r.Strength,
+				})
+			}
 			points = append(points, repository.ExtractedKnowledgePoint{
 				Concept:       point.Concept,
 				Description:   point.Description,
 				Prerequisites: point.Prerequisites,
+				BloomLevel:    point.BloomLevel,
+				Importance:    point.Importance,
+				Granularity:   point.Granularity,
+				Relations:     rels,
 			})
 			names = append(names, point.Concept)
 		}

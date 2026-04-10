@@ -59,7 +59,13 @@ MindFlow 是一个 AI 苏格拉底式学习系统。学生上传学习资料，A
 ```
 类型：feat / fix / test / refactor / docs / chore
 
-### 5. 依赖变化需重建镜像
+### 6. 子 Agent 结果必须落文件
+
+启动子 agent 并行执行任务时，每个 agent 返回的结果必须保存为项目文件（通常在 `docs/` 目录下）。文件开头必须注明：
+- **任务**：这次任务是干嘛的
+- **执行时间**：什么时候执行的
+
+### 7. 依赖变化需重建镜像
 
 源码改动 HMR 自动生效。`package.json` / `requirements.txt` / `go.mod` 变化时需 `docker compose up -d --build <服务名>`。
 

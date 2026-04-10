@@ -30,11 +30,22 @@ type KnowledgeEdge struct {
 	ToConcept    string `json:"to"`
 }
 
+// ExtractedRelation 提取出的知识点关系。
+type ExtractedRelation struct {
+	Target   string
+	Type     string
+	Strength float64
+}
+
 // ExtractedKnowledgePoint 资料解析后提取出的知识点。
 type ExtractedKnowledgePoint struct {
 	Concept       string
 	Description   string
 	Prerequisites []string
+	BloomLevel    string
+	Importance    float64
+	Granularity   int
+	Relations     []ExtractedRelation
 }
 
 // KnowledgeRepo 知识图谱数据访问
@@ -100,34 +111,99 @@ func (r *KnowledgeRepo) ListEdges(ctx context.Context) ([]KnowledgeEdge, error) 
 	return edges, nil
 }
 
-// UpsertExtractedPoints 写入资料提取出的知识点及前置关系。
+// UpsertExtractedPoints 写入资料提取出的知识点及关系。
 func (r *KnowledgeRepo) UpsertExtractedPoints(ctx context.Context, points []ExtractedKnowledgePoint) error {
 	for _, point := range points {
+		bloomLevel := point.BloomLevel
+		if bloomLevel == "" {
+			bloomLevel = "remember"
+		}
+		importance := point.Importance
+		if importance <= 0 {
+			importance = 0.5
+		}
+		granularity := point.Granularity
+		if granularity < 1 || granularity > 4 {
+			granularity = 3
+		}
+
+		// upsert 知识点，包含新字段
 		if _, err := r.pool.Exec(ctx, `
-			INSERT INTO knowledge_mastery (concept, confidence, updated_at)
-			VALUES ($1, 0.0, NOW())
-			ON CONFLICT (concept)
-			DO UPDATE SET updated_at = NOW()
-		`, point.Concept); err != nil {
+			INSERT INTO knowledge_mastery (concept, description, bloom_level, importance, granularity_level, confidence, updated_at)
+			VALUES ($1, $2, $3, $4, $5, 0.0, NOW())
+			ON CONFLICT (concept) DO UPDATE SET
+				description = CASE WHEN EXCLUDED.description != '' THEN EXCLUDED.description ELSE knowledge_mastery.description END,
+				bloom_level = EXCLUDED.bloom_level,
+				importance = EXCLUDED.importance,
+				granularity_level = EXCLUDED.granularity_level,
+				updated_at = NOW()
+		`, point.Concept, point.Description, bloomLevel, importance, granularity); err != nil {
 			return err
 		}
 
-		for _, prerequisite := range point.Prerequisites {
+		// 写入多种关系类型
+		for _, rel := range point.Relations {
+			if rel.Target == "" {
+				continue
+			}
+			strength := rel.Strength
+			if strength <= 0 {
+				strength = 0.5
+			}
+			relType := rel.Type
+			if relType == "" {
+				relType = "prerequisite"
+			}
+
+			// 确保关系目标也存在于知识图谱
 			if _, err := r.pool.Exec(ctx, `
 				INSERT INTO knowledge_mastery (concept, confidence, updated_at)
 				VALUES ($1, 0.0, NOW())
-				ON CONFLICT (concept)
-				DO UPDATE SET updated_at = NOW()
-			`, prerequisite); err != nil {
+				ON CONFLICT (concept) DO UPDATE SET updated_at = NOW()
+			`, rel.Target); err != nil {
 				return err
 			}
 
 			if _, err := r.pool.Exec(ctx, `
-				INSERT INTO knowledge_relations (from_concept, relation_type, to_concept)
-				VALUES ($1, 'prerequisite', $2)
+				INSERT INTO knowledge_relations (from_concept, relation_type, to_concept, strength)
+				VALUES ($1, $2, $3, $4)
 				ON CONFLICT (from_concept, relation_type, to_concept)
-				DO NOTHING
-			`, point.Concept, prerequisite); err != nil {
+				DO UPDATE SET strength = EXCLUDED.strength
+			`, point.Concept, relType, rel.Target, strength); err != nil {
+				return err
+			}
+		}
+
+		// 兼容旧的 prerequisites 字段（如果 relations 中没覆盖）
+		for _, prereq := range point.Prerequisites {
+			if prereq == "" {
+				continue
+			}
+			// 检查 relations 中是否已包含
+			found := false
+			for _, rel := range point.Relations {
+				if rel.Target == prereq && rel.Type == "prerequisite" {
+					found = true
+					break
+				}
+			}
+			if found {
+				continue
+			}
+
+			if _, err := r.pool.Exec(ctx, `
+				INSERT INTO knowledge_mastery (concept, confidence, updated_at)
+				VALUES ($1, 0.0, NOW())
+				ON CONFLICT (concept) DO UPDATE SET updated_at = NOW()
+			`, prereq); err != nil {
+				return err
+			}
+
+			if _, err := r.pool.Exec(ctx, `
+				INSERT INTO knowledge_relations (from_concept, relation_type, to_concept, strength)
+				VALUES ($1, 'prerequisite', $2, 0.8)
+				ON CONFLICT (from_concept, relation_type, to_concept) DO NOTHING
+			`, point.Concept, prereq); err != nil {
 				return err
 			}
 		}
@@ -260,6 +336,71 @@ func (r *KnowledgeRepo) UpdateMasteryWithSM2(ctx context.Context, concept string
 		time.Now().AddDate(0, 0, updated.Interval), concept,
 	)
 	return err
+}
+
+// UpdateMasteryWithFSRS 使用 FSRS 算法评分更新知识点掌握度
+func (r *KnowledgeRepo) UpdateMasteryWithFSRS(ctx context.Context, concept string, rating review.Rating) error {
+	var stability, difficulty float64
+	var elapsedDays, scheduledDays, reps, lapses int
+	var state int16
+	var lastReviewed, nextReview time.Time
+
+	err := r.pool.QueryRow(ctx,
+		`SELECT stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_reviewed, next_review
+		 FROM knowledge_mastery WHERE concept = $1`,
+		concept,
+	).Scan(&stability, &difficulty, &elapsedDays, &scheduledDays, &reps, &lapses, &state, &lastReviewed, &nextReview)
+	if err != nil {
+		return err
+	}
+
+	card := review.FSRSCard{
+		Stability:     stability,
+		Difficulty:    difficulty,
+		ElapsedDays:   elapsedDays,
+		ScheduledDays: scheduledDays,
+		Reps:          reps,
+		Lapses:        lapses,
+		State:         review.CardState(state),
+		LastReview:    lastReviewed,
+		NextReview:    nextReview,
+	}
+
+	scheduler := review.NewFSRSScheduler()
+	updated := scheduler.Schedule(card, rating, time.Now())
+	newConfidence := review.RatingToConfidence(rating)
+
+	_, err = r.pool.Exec(ctx,
+		`UPDATE knowledge_mastery
+		 SET confidence = $1, stability = $2, difficulty = $3,
+		     elapsed_days = $4, scheduled_days = $5, reps = $6, lapses = $7, state = $8,
+		     next_review = $9, last_reviewed = NOW(), updated_at = NOW(),
+		     interval_days = $10, repetitions = $6
+		 WHERE concept = $11`,
+		newConfidence, updated.Stability, updated.Difficulty,
+		updated.ElapsedDays, updated.ScheduledDays, updated.Reps, updated.Lapses, int16(updated.State),
+		updated.NextReview, updated.ScheduledDays, concept,
+	)
+	return err
+}
+
+// ListConceptNames 获取所有已有概念名称（轻量查询，用于去重）
+func (r *KnowledgeRepo) ListConceptNames(ctx context.Context) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT concept FROM knowledge_mastery ORDER BY concept`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
 }
 
 // DeleteByConcept 删除指定知识点（含关系）
