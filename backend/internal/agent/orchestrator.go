@@ -96,21 +96,36 @@ func (o *Orchestrator) SetDifficultyLevel(level DifficultyLevel) {
 func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (string, error) {
 	decision, _ := o.Route(ctx, messages)
 
+	var reply string
+	var err error
+
 	switch decision.Agent {
 	case AgentTypeQuiz:
-		return o.quiz.GenerateQuiz(ctx, messages)
+		reply, err = o.quiz.GenerateQuiz(ctx, messages)
 	case AgentTypeCurriculum:
-		return o.curriculum.Plan(ctx, messages)
+		reply, err = o.curriculum.Plan(ctx, messages)
 	case AgentTypeDiagnostic:
-		return o.diagnostic.Diagnose(ctx, messages)
+		reply, err = o.diagnostic.Diagnose(ctx, messages)
 	case AgentTypeContent:
 		if o.content != nil {
-			return o.content.Chat(ctx, messages)
+			reply, err = o.content.Chat(ctx, messages)
+		} else {
+			reply, err = o.tutor.Chat(ctx, messages)
 		}
-		return o.tutor.Chat(ctx, messages)
 	default:
-		return o.tutor.Chat(ctx, messages)
+		reply, err = o.tutor.Chat(ctx, messages)
 	}
+
+	// 记录学习日志
+	if err == nil && o.memAgent != nil && len(messages) > 0 {
+		lastMsg := messages[len(messages)-1]
+		if lastMsg.Role == "user" {
+			entry := "**用户**: " + lastMsg.Content + "\n\n**AI**: " + reply
+			o.memAgent.RecordLog(entry)
+		}
+	}
+
+	return reply, err
 }
 
 // ChatStream 根据路由决策调度流式对话

@@ -78,3 +78,11 @@ func (m *MemoryAgent) Search(query string) ([]memory.SearchResult, error) {
 	}
 	return m.store.Search(query)
 }
+
+// RecordLog 记录一条学习日志到今日日志
+func (m *MemoryAgent) RecordLog(entry string) {
+	if m.store == nil {
+		return
+	}
+	_ = m.store.AppendTodayLog(entry)
+}
