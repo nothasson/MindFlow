@@ -110,7 +110,13 @@ func main() {
 	)
 
 	// CORS 中间件（从配置读取允许的 origins）
-	corsOrigins := strings.Split(cfg.CORSOrigins, ",")
+	rawOrigins := strings.Split(cfg.CORSOrigins, ",")
+	var corsOrigins []string
+	for _, o := range rawOrigins {
+		if trimmed := strings.TrimSpace(o); trimmed != "" {
+			corsOrigins = append(corsOrigins, trimmed)
+		}
+	}
 	h.Use(cors.New(cors.Config{
 		AllowOrigins:     corsOrigins,
 		AllowMethods:     []string{"GET", "POST", "DELETE", "OPTIONS"},

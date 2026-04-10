@@ -60,7 +60,7 @@ func (h *CourseHandler) GenerateFromResource(ctx context.Context, c *app.Request
 	var req struct {
 		Difficulty string `json:"difficulty"`
 	}
-	c.BindJSON(&req)
+	_ = c.BindJSON(&req) // 允许无 body（使用默认值）
 	if req.Difficulty == "" {
 		req.Difficulty = "beginner"
 	}

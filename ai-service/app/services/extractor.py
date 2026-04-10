@@ -55,7 +55,7 @@ def _extract_with_llm(text: str) -> list[dict]:
     try:
         with request.urlopen(req, timeout=60) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-    except (error.URLError, TimeoutError, json.JSONDecodeError):
+    except Exception:
         return []
 
     try:

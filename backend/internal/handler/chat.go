@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -121,12 +123,10 @@ func (h *ChatHandler) ensureConversation(ctx context.Context, req ChatRequest) (
 		if err != nil {
 			return uuid.Nil, err
 		}
-		// 更新 updated_at
 		_ = h.convRepo.TouchUpdatedAt(ctx, id)
 		return id, nil
 	}
 
-	// 从第一条用户消息取标题
 	title := ""
 	for _, m := range req.Messages {
 		if m.Role == "user" {
@@ -155,7 +155,9 @@ func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext
 
 	// 保存 assistant 消息
 	if h.msgRepo != nil && convID != uuid.Nil {
-		h.msgRepo.Create(ctx, convID, "assistant", reply)
+		if _, err := h.msgRepo.Create(ctx, convID, "assistant", reply); err != nil {
+			log.Printf("保存 assistant 消息失败: %v", err)
+		}
 	}
 
 	c.JSON(http.StatusOK, ChatResponse{
@@ -177,43 +179,51 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 
 	stream := sse.NewStream(c)
 
-	// 首条事件包含 conversation_id（如果有）
 	if convID != uuid.Nil {
 		firstData, _ := json.Marshal(SSEData{ConversationID: convID.String()})
 		stream.Publish(&sse.Event{Data: firstData})
 	}
 
+	// 用 channel 同步：goroutine 完成后 handler 才返回，避免写入已回收的 response
+	done := make(chan struct{})
+
 	go func() {
+		defer close(done)
 		defer reader.Close()
 
 		var fullContent strings.Builder
 
 		for {
-			chunk, err := reader.Recv()
-			if err != nil {
-				if err == io.EOF {
-				// 保存完整的 assistant 消息
-				if h.msgRepo != nil && convID != uuid.Nil {
-					h.msgRepo.Create(context.Background(), convID, "assistant", fullContent.String())
-				}
-
-				// 记录学习日志到记忆系统
-				if len(messages) > 0 {
-					lastUserMsg := ""
-					for i := len(messages) - 1; i >= 0; i-- {
-						if messages[i].Role == "user" {
-							lastUserMsg = messages[i].Content
-							break
+			chunk, recvErr := reader.Recv()
+			if recvErr != nil {
+				if recvErr == io.EOF {
+					// 保存完整的 assistant 消息
+					if h.msgRepo != nil && convID != uuid.Nil {
+						saveCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+						defer cancel()
+						if _, saveErr := h.msgRepo.Create(saveCtx, convID, "assistant", fullContent.String()); saveErr != nil {
+							log.Printf("流式保存 assistant 消息失败: %v", saveErr)
 						}
 					}
-					h.orchestrator.RecordMemory(lastUserMsg, fullContent.String())
-				}
+
+					// 记录学习日志
+					if len(messages) > 0 {
+						lastUserMsg := ""
+						for i := len(messages) - 1; i >= 0; i-- {
+							if messages[i].Role == "user" {
+								lastUserMsg = messages[i].Content
+								break
+							}
+						}
+						h.orchestrator.RecordMemory(lastUserMsg, fullContent.String())
+					}
 
 					data, _ := json.Marshal(SSEData{Done: true})
 					stream.Publish(&sse.Event{Data: data})
 					return
 				}
-				data, _ := json.Marshal(SSEData{Error: "流式读取失败: " + err.Error(), Done: true})
+
+				data, _ := json.Marshal(SSEData{Error: "流式读取失败: " + recvErr.Error(), Done: true})
 				stream.Publish(&sse.Event{Data: data})
 				return
 			}
@@ -226,5 +236,5 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 		}
 	}()
 
-	<-ctx.Done()
+	<-done
 }

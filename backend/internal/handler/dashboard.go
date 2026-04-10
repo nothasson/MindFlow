@@ -37,12 +37,8 @@ func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
 	convs, _ := h.convRepo.List(ctx)
 	totalConversations := len(convs)
 
-	// 消息数
-	totalMessages := 0
-	for _, conv := range convs {
-		msgs, _ := h.msgRepo.GetByConversationID(ctx, conv.ID)
-		totalMessages += len(msgs)
-	}
+	// 消息数（单条 SQL 聚合，避免 N+1）
+	totalMessages, _ := h.msgRepo.CountAll(ctx)
 
 	// 资料数
 	resources, _ := h.resourceRepo.List(ctx)
@@ -81,22 +77,20 @@ func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
 		weakPoints = []repository.ReviewItem{}
 	}
 
-	// 学习趋势（最近 7 天每天的消息数）
+	// 学习趋势（最近 7 天每天的消息数，单条 SQL）
 	type DayCount struct {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
+	trendMap := map[string]int{}
+	trendRows, _ := h.msgRepo.CountByDay(ctx, 7)
+	for _, r := range trendRows {
+		trendMap[r.Date] = r.Count
+	}
 	var trend []DayCount
 	for i := 6; i >= 0; i-- {
 		day := today.AddDate(0, 0, -i).Format("2006-01-02")
-		count := 0
-		for _, conv := range convs {
-			if conv.CreatedAt.Format("2006-01-02") == day {
-				msgs, _ := h.msgRepo.GetByConversationID(ctx, conv.ID)
-				count += len(msgs)
-			}
-		}
-		trend = append(trend, DayCount{Date: day, Count: count})
+		trend = append(trend, DayCount{Date: day, Count: trendMap[day]})
 	}
 
 	c.JSON(http.StatusOK, utils.H{

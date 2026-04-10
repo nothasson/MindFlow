@@ -65,6 +65,9 @@ func (r *KnowledgeRepo) ListNodes(ctx context.Context) ([]KnowledgeNode, error) 
 		}
 		nodes = append(nodes, n)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return nodes, nil
 }
 
@@ -88,6 +91,9 @@ func (r *KnowledgeRepo) ListEdges(ctx context.Context) ([]KnowledgeEdge, error) 
 			return nil, err
 		}
 		edges = append(edges, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return edges, nil
 }
@@ -159,6 +165,9 @@ func (r *KnowledgeRepo) GetDueForReview(ctx context.Context) ([]ReviewItem, erro
 		}
 		items = append(items, item)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return items, nil
 }
 
@@ -184,6 +193,9 @@ func (r *KnowledgeRepo) GetUpcomingReview(ctx context.Context, days int) ([]Revi
 		}
 		items = append(items, item)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return items, nil
 }
 
@@ -207,6 +219,9 @@ func (r *KnowledgeRepo) GetWeakPoints(ctx context.Context, limit int) ([]ReviewI
 			return nil, err
 		}
 		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return items, nil
 }
