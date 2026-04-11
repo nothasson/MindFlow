@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -97,7 +98,15 @@ export default function ReviewSessionPage() {
           body: JSON.stringify({ concept }),
         });
         const data = await res.json();
-        setQuiz(data);
+        // API 返回 {concept, questions} — questions 是 Markdown 文本
+        const questionText = typeof data.questions === "string" ? data.questions : `请解释「${concept}」的核心概念。`;
+        setQuiz({
+          id: `quiz-${Date.now()}`,
+          concept: data.concept ?? concept,
+          question: questionText,
+          answer: "",
+          explanation: "",
+        });
         setPhase("answering");
       } catch {
         // 生成失败时显示一个简单的自评题
@@ -132,16 +141,21 @@ export default function ReviewSessionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          quiz_id: quiz.id,
           concept: quiz.concept,
-          question: quiz.question,
-          user_answer: answer.trim(),
-          correct_answer: quiz.answer,
+          question: quiz.question.slice(0, 500),
+          answer: answer.trim(),
         }),
       });
-      const data: SubmitResult = await res.json();
-      setResult(data);
-      if (data.correct) {
+      const data = await res.json();
+      // 后端返回 {is_correct, score, explanation, concept}
+      const submitResult: SubmitResult = {
+        correct: data.is_correct ?? false,
+        score: data.score ?? 0,
+        explanation: data.explanation ?? "",
+        correct_answer: "",
+      };
+      setResult(submitResult);
+      if (submitResult.correct) {
         setCorrectCount((c) => c + 1);
         setStreak((s) => s + 1);
       } else {
@@ -297,9 +311,9 @@ export default function ReviewSessionPage() {
                       正在生成题目…
                     </div>
                   ) : quiz ? (
-                    <p className="whitespace-pre-wrap text-stone-700">
-                      {quiz.question}
-                    </p>
+                    <div className="text-stone-700">
+                      <MarkdownRenderer content={quiz.question} />
+                    </div>
                   ) : null}
                 </div>
 
