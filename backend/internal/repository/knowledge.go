@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nothasson/MindFlow/backend/internal/review"
@@ -59,12 +60,23 @@ func NewKnowledgeRepo(db *DB) *KnowledgeRepo {
 }
 
 // ListNodes 获取所有知识点节点
-func (r *KnowledgeRepo) ListNodes(ctx context.Context) ([]KnowledgeNode, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, concept, confidence, error_type, easiness_factor, interval_days, repetitions, last_reviewed, next_review
-		 FROM knowledge_mastery
-		 ORDER BY concept`,
-	)
+// userID 可为 nil，表示不按用户过滤（兼容无登录状态）
+func (r *KnowledgeRepo) ListNodes(ctx context.Context, userID ...*uuid.UUID) ([]KnowledgeNode, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT id, concept, confidence, error_type, easiness_factor, interval_days, repetitions, last_reviewed, next_review
+		 FROM knowledge_mastery`
+	var args []interface{}
+	if uid != nil {
+		query += ` WHERE (user_id = $1 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY concept`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -224,11 +236,23 @@ type ReviewItem struct {
 }
 
 // GetDueForReview 获取今日到期的复习项
-func (r *KnowledgeRepo) GetDueForReview(ctx context.Context) ([]ReviewItem, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, concept, confidence, easiness_factor, interval_days, repetitions, next_review, last_reviewed
-		 FROM knowledge_mastery WHERE next_review <= NOW() ORDER BY next_review ASC LIMIT 50`,
-	)
+// userID 可为 nil，表示不按用户过滤
+func (r *KnowledgeRepo) GetDueForReview(ctx context.Context, userID ...*uuid.UUID) ([]ReviewItem, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT id, concept, confidence, easiness_factor, interval_days, repetitions, next_review, last_reviewed
+		 FROM knowledge_mastery WHERE next_review <= NOW()`
+	var args []interface{}
+	if uid != nil {
+		query += ` AND (user_id = $1 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY next_review ASC LIMIT 50`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -250,13 +274,23 @@ func (r *KnowledgeRepo) GetDueForReview(ctx context.Context) ([]ReviewItem, erro
 }
 
 // GetUpcomingReview 获取未来 N 天内到期的复习项
-func (r *KnowledgeRepo) GetUpcomingReview(ctx context.Context, days int) ([]ReviewItem, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, concept, confidence, easiness_factor, interval_days, repetitions, next_review, last_reviewed
-		 FROM knowledge_mastery WHERE next_review > NOW() AND next_review <= NOW() + make_interval(days => $1)
-		 ORDER BY next_review ASC LIMIT 50`,
-		days,
-	)
+// userID 可为 nil，表示不按用户过滤
+func (r *KnowledgeRepo) GetUpcomingReview(ctx context.Context, days int, userID ...*uuid.UUID) ([]ReviewItem, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT id, concept, confidence, easiness_factor, interval_days, repetitions, next_review, last_reviewed
+		 FROM knowledge_mastery WHERE next_review > NOW() AND next_review <= NOW() + make_interval(days => $1)`
+	args := []interface{}{days}
+	if uid != nil {
+		query += ` AND (user_id = $2 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY next_review ASC LIMIT 50`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -278,12 +312,23 @@ func (r *KnowledgeRepo) GetUpcomingReview(ctx context.Context, days int) ([]Revi
 }
 
 // GetWeakPoints 获取薄弱知识点（confidence < 0.5，按 confidence 升序）
-func (r *KnowledgeRepo) GetWeakPoints(ctx context.Context, limit int) ([]ReviewItem, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, concept, confidence, easiness_factor, interval_days, repetitions, next_review, last_reviewed
-		 FROM knowledge_mastery WHERE confidence < 0.5 ORDER BY confidence ASC LIMIT $1`,
-		limit,
-	)
+// userID 可为 nil，表示不按用户过滤
+func (r *KnowledgeRepo) GetWeakPoints(ctx context.Context, limit int, userID ...*uuid.UUID) ([]ReviewItem, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT id, concept, confidence, easiness_factor, interval_days, repetitions, next_review, last_reviewed
+		 FROM knowledge_mastery WHERE confidence < 0.5`
+	args := []interface{}{limit}
+	if uid != nil {
+		query += ` AND (user_id = $2 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY confidence ASC LIMIT $1`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

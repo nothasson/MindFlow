@@ -32,7 +32,7 @@ type resourceAIClient interface {
 
 // resourceStore 抽象资料存储能力，便于测试。
 type resourceStore interface {
-	Create(ctx context.Context, resource *mdl.Resource) (*mdl.Resource, error)
+	Create(ctx context.Context, resource *mdl.Resource, userID ...*uuid.UUID) (*mdl.Resource, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string, chunkCount int) error
 	UpdateOverview(ctx context.Context, id uuid.UUID, summary string, questions []string) error
 }

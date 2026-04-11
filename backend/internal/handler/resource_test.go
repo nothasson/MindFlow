@@ -71,7 +71,7 @@ type resourceStatusUpdate struct {
 	chunkCount int
 }
 
-func (s *stubResourceStore) Create(ctx context.Context, resource *model.Resource) (*model.Resource, error) {
+func (s *stubResourceStore) Create(ctx context.Context, resource *model.Resource, userID ...*uuid.UUID) (*model.Resource, error) {
 	copied := *resource
 	copied.ID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	s.created = &copied

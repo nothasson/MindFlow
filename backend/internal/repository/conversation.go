@@ -21,11 +21,17 @@ func NewConversationRepo(db *DB) *ConversationRepo {
 }
 
 // Create 创建会话
-func (r *ConversationRepo) Create(ctx context.Context, title string) (*model.Conversation, error) {
+// userID 可为 nil，表示无登录状态
+func (r *ConversationRepo) Create(ctx context.Context, title string, userID ...*uuid.UUID) (*model.Conversation, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var conv model.Conversation
 	err := r.pool.QueryRow(ctx,
-		`INSERT INTO conversations (title) VALUES ($1) RETURNING id, title, created_at, updated_at`,
-		title,
+		`INSERT INTO conversations (title, user_id) VALUES ($1, $2) RETURNING id, title, created_at, updated_at`,
+		title, uid,
 	).Scan(&conv.ID, &conv.Title, &conv.CreatedAt, &conv.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -47,10 +53,22 @@ func (r *ConversationRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Co
 }
 
 // List 获取会话列表（最近 20 条）
-func (r *ConversationRepo) List(ctx context.Context) ([]model.Conversation, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC LIMIT 20`,
-	)
+// userID 可为 nil，表示不按用户过滤（兼容无登录状态）
+func (r *ConversationRepo) List(ctx context.Context, userID ...*uuid.UUID) ([]model.Conversation, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT id, title, created_at, updated_at FROM conversations`
+	var args []interface{}
+	if uid != nil {
+		query += ` WHERE (user_id = $1 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT 20`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -95,27 +113,57 @@ func (r *ConversationRepo) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // Count 获取会话总数
-func (r *ConversationRepo) Count(ctx context.Context) (int, error) {
+// userID 可为 nil，表示不按用户过滤
+func (r *ConversationRepo) Count(ctx context.Context, userID ...*uuid.UUID) (int, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var count int
+	if uid != nil {
+		err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM conversations WHERE (user_id = $1 OR user_id IS NULL)`, *uid).Scan(&count)
+		return count, err
+	}
 	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM conversations`).Scan(&count)
 	return count, err
 }
 
 // CountDistinctDays 获取有会话的不同日期数
-func (r *ConversationRepo) CountDistinctDays(ctx context.Context) (int, error) {
+// userID 可为 nil，表示不按用户过滤
+func (r *ConversationRepo) CountDistinctDays(ctx context.Context, userID ...*uuid.UUID) (int, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var count int
+	if uid != nil {
+		err := r.pool.QueryRow(ctx, `SELECT COUNT(DISTINCT DATE(created_at)) FROM conversations WHERE (user_id = $1 OR user_id IS NULL)`, *uid).Scan(&count)
+		return count, err
+	}
 	err := r.pool.QueryRow(ctx, `SELECT COUNT(DISTINCT DATE(created_at)) FROM conversations`).Scan(&count)
 	return count, err
 }
 
 // GetActiveDays 获取最近 N 天内有会话的日期列表
-func (r *ConversationRepo) GetActiveDays(ctx context.Context, days int) ([]string, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT DISTINCT DATE(created_at) as day FROM conversations
-		 WHERE created_at >= NOW() - make_interval(days => $1)
-		 ORDER BY day DESC`,
-		days,
-	)
+// userID 可为 nil，表示不按用户过滤
+func (r *ConversationRepo) GetActiveDays(ctx context.Context, days int, userID ...*uuid.UUID) ([]string, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT DISTINCT DATE(created_at) as day FROM conversations
+		 WHERE created_at >= NOW() - make_interval(days => $1)`
+	args := []interface{}{days}
+	if uid != nil {
+		query += ` AND (user_id = $2 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY day DESC`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

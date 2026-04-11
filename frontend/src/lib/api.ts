@@ -2,6 +2,77 @@ import type { ChatRequest, ChatResponse, Conversation, DailyBriefing, KnowledgeG
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
+// ===== Token 管理 =====
+
+/** 获取本地存储的 JWT token */
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("mindflow_token");
+}
+
+/** 构建带 Authorization header 的请求头 */
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extra };
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+// ===== 认证 API =====
+
+/** 认证响应 */
+export interface AuthResponse {
+  token: string;
+  user: {
+    id: string;
+    email: string;
+    display_name: string;
+    created_at: string;
+  };
+}
+
+/** 用户注册 */
+export async function register(email: string, password: string, displayName?: string): Promise<AuthResponse> {
+  const response = await fetch(`${API_URL}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, display_name: displayName ?? "" }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `注册失败 (${response.status})`);
+  }
+  return response.json();
+}
+
+/** 用户登录 */
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const response = await fetch(`${API_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `登录失败 (${response.status})`);
+  }
+  return response.json();
+}
+
+/** 获取当前用户信息 */
+export async function getMe(): Promise<AuthResponse["user"]> {
+  const response = await fetch(`${API_URL}/api/auth/me`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error("获取用户信息失败");
+  }
+  const data = (await response.json()) as { user: AuthResponse["user"] };
+  return data.user;
+}
+
 /** 非流式发送（保留兼容） */
 export async function sendMessage(messages: Message[]): Promise<Message> {
   const controller = new AbortController();
@@ -10,7 +81,7 @@ export async function sendMessage(messages: Message[]): Promise<Message> {
   try {
     const response = await fetch(`${API_URL}/api/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ messages } satisfies ChatRequest),
       signal: controller.signal,
     });
@@ -64,7 +135,7 @@ export async function sendMessageStream(
 
     const response = await fetch(`${API_URL}/api/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -138,7 +209,9 @@ export async function sendMessageStream(
 
 /** 获取会话列表 */
 export async function getConversations(): Promise<Conversation[]> {
-  const response = await fetch(`${API_URL}/api/conversations`);
+  const response = await fetch(`${API_URL}/api/conversations`, {
+    headers: authHeaders(),
+  });
   if (!response.ok) throw new Error("获取会话列表失败");
   const data = (await response.json()) as { conversations: Conversation[] };
   return data.conversations;
@@ -146,20 +219,27 @@ export async function getConversations(): Promise<Conversation[]> {
 
 /** 获取会话详情（含消息） */
 export async function getConversation(id: string): Promise<{ conversation: Conversation; messages: Message[] }> {
-  const response = await fetch(`${API_URL}/api/conversations/${id}`);
+  const response = await fetch(`${API_URL}/api/conversations/${id}`, {
+    headers: authHeaders(),
+  });
   if (!response.ok) throw new Error("获取会话详情失败");
   return response.json();
 }
 
 /** 删除会话 */
 export async function deleteConversation(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/conversations/${id}`, { method: "DELETE" });
+  const response = await fetch(`${API_URL}/api/conversations/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
   if (!response.ok) throw new Error("删除会话失败");
 }
 
 /** 获取知识图谱数据 */
 export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
-  const response = await fetch(`${API_URL}/api/knowledge/graph`);
+  const response = await fetch(`${API_URL}/api/knowledge/graph`, {
+    headers: authHeaders(),
+  });
   if (!response.ok) throw new Error("获取知识图谱失败");
   return response.json();
 }
@@ -174,7 +254,7 @@ export async function sendEchoStream(
   try {
     const response = await fetch(`${API_URL}/api/echo`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ content, delay_ms: 30 }),
     });
 
@@ -227,6 +307,7 @@ export async function uploadResource(file: File): Promise<ResourceUploadResult> 
 
   const response = await fetch(`${API_URL}/api/resources/upload`, {
     method: "POST",
+    headers: authHeaders(),
     body: formData,
   });
 
@@ -240,7 +321,9 @@ export async function uploadResource(file: File): Promise<ResourceUploadResult> 
 
 /** 获取今日学习简报 */
 export async function getDailyBriefing(): Promise<DailyBriefing> {
-  const response = await fetch(`${API_URL}/api/daily-briefing`);
+  const response = await fetch(`${API_URL}/api/daily-briefing`, {
+    headers: authHeaders(),
+  });
   if (!response.ok) throw new Error("获取学习简报失败");
   const data = (await response.json()) as { briefing: DailyBriefing };
   return data.briefing;
@@ -250,7 +333,7 @@ export async function getDailyBriefing(): Promise<DailyBriefing> {
 export async function importUrlResource(url: string): Promise<ResourceUploadResult> {
   const response = await fetch(`${API_URL}/api/resources/import-url`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ url }),
   });
 
@@ -264,7 +347,9 @@ export async function importUrlResource(url: string): Promise<ResourceUploadResu
 
 /** 查询知识点的所有来源（资料、测验、对话） */
 export async function getKnowledgeSources(concept: string): Promise<KnowledgeSourceLink[]> {
-  const response = await fetch(`${API_URL}/api/knowledge/sources?concept=${encodeURIComponent(concept)}`);
+  const response = await fetch(`${API_URL}/api/knowledge/sources?concept=${encodeURIComponent(concept)}`, {
+    headers: authHeaders(),
+  });
   if (!response.ok) throw new Error("获取知识点来源失败");
   const data = (await response.json()) as { concept: string; sources: KnowledgeSourceLink[] };
   return data.sources;

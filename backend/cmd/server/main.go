@@ -43,6 +43,7 @@ func main() {
 	convRepo := repository.NewConversationRepo(db)
 	msgRepo := repository.NewMessageRepo(db)
 	resourceRepo := repository.NewResourceRepo(db)
+	userRepo := repository.NewUserRepo(db)
 
 	// 初始化 LLM ModelSwitch（支持多 provider 热切换）
 	modelSwitch := llm.NewModelSwitch()
@@ -139,6 +140,13 @@ func main() {
 	examRepo := repository.NewExamRepo(db)
 	examHandler := handler.NewExamHandler(examRepo)
 
+	// 初始化 LLM 评估 Handler
+	evalRepo := repository.NewEvaluationRepo(db)
+	evalHandler := handler.NewEvaluationHandler(evalRepo)
+
+	// 注入评估依赖到 ChatHandler（异步评估对话质量）
+	chatHandler.SetEvaluation(evalRepo, chatModel)
+
 	// 初始化晨间简报 Handler
 	curriculumAgent := agent.NewCurriculumAgent(chatModel)
 	briefingHandler := handler.NewBriefingHandler(knowledgeRepo, quizRepo, convRepo, curriculumAgent)
@@ -167,6 +175,19 @@ func main() {
 	// 路由
 	h.GET("/health", func(ctx context.Context, c *app.RequestContext) {
 		c.JSON(200, utils.H{"status": "ok", "service": "mindflow-backend"})
+	})
+
+	// 认证路由（无需 JWT 中间件）
+	authHandler := handler.NewAuthHandler(userRepo, cfg.JWTSecret)
+	authGroup := h.Group("/api/auth")
+	authGroup.POST("/register", func(ctx context.Context, c *app.RequestContext) {
+		authHandler.Register(ctx, c)
+	})
+	authGroup.POST("/login", func(ctx context.Context, c *app.RequestContext) {
+		authHandler.Login(ctx, c)
+	})
+	authGroup.GET("/me", handler.JWTAuth(cfg.JWTSecret), func(ctx context.Context, c *app.RequestContext) {
+		authHandler.Me(ctx, c)
 	})
 
 	// Provider 设置 API
@@ -347,6 +368,14 @@ func main() {
 	// 晨间简报路由
 	h.GET("/api/daily-briefing", func(ctx context.Context, c *app.RequestContext) {
 		briefingHandler.GetBriefing(ctx, c)
+	})
+
+	// LLM 评估路由
+	h.GET("/api/evaluations/stats", func(ctx context.Context, c *app.RequestContext) {
+		evalHandler.Stats(ctx, c)
+	})
+	h.POST("/api/evaluations", func(ctx context.Context, c *app.RequestContext) {
+		evalHandler.Create(ctx, c)
 	})
 
 	log.Printf("MindFlow Backend 启动在 :%s", cfg.Port)

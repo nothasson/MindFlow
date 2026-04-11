@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
+	einomodel "github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
 	"github.com/hertz-contrib/sse"
@@ -63,11 +65,19 @@ type ChatHandler struct {
 	msgRepo       *repository.MessageRepo
 	knowledgeRepo *repository.KnowledgeRepo
 	aiClient      ChatAIClient
+	evalRepo      *repository.EvaluationRepo // LLM 评估仓库（可选）
+	evalModel     einomodel.ChatModel        // 用于评估的 LLM 模型（可选）
 }
 
 // NewChatHandler 创建对话处理器
 func NewChatHandler(orchestrator *agent.Orchestrator, convRepo *repository.ConversationRepo, msgRepo *repository.MessageRepo, knowledgeRepo *repository.KnowledgeRepo, aiClient ChatAIClient) *ChatHandler {
 	return &ChatHandler{orchestrator: orchestrator, convRepo: convRepo, msgRepo: msgRepo, knowledgeRepo: knowledgeRepo, aiClient: aiClient}
+}
+
+// SetEvaluation 注入 LLM 评估依赖（可选）
+func (h *ChatHandler) SetEvaluation(evalRepo *repository.EvaluationRepo, evalModel einomodel.ChatModel) {
+	h.evalRepo = evalRepo
+	h.evalModel = evalModel
 }
 
 // Handle POST /api/chat
@@ -181,6 +191,9 @@ func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext
 	}
 	go h.extractAndSaveKnowledge(lastUserMsg, reply)
 
+	// 异步评估对话质量
+	go h.evaluateChatQuality(convID, lastUserMsg, reply)
+
 	c.JSON(http.StatusOK, ChatResponse{
 		ConversationID: convID.String(),
 		Message: MessageDTO{
@@ -241,6 +254,9 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 
 					// 异步从对话内容中提取知识点写入知识图谱
 					go h.extractAndSaveKnowledge(lastUserMsg, fullContent.String())
+
+					// 异步评估对话质量
+					go h.evaluateChatQuality(convID, lastUserMsg, fullContent.String())
 
 					data, _ := json.Marshal(SSEData{Done: true})
 					stream.Publish(&sse.Event{Data: data})
@@ -331,5 +347,80 @@ func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string) {
 			names[i] = p.Concept
 		}
 		log.Printf("对话知识点已写入知识图谱: %v", names)
+	}
+}
+
+// evaluateChatQuality 异步评估对话质量，将评分写入 llm_evaluations 表。
+// 在后台 goroutine 中执行，失败时静默忽略。
+func (h *ChatHandler) evaluateChatQuality(convID uuid.UUID, userMsg, assistantMsg string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("evaluateChatQuality panic: %v", r)
+		}
+	}()
+
+	if h.evalRepo == nil || h.evalModel == nil {
+		return
+	}
+
+	// 内容太短不评估
+	if len([]rune(userMsg+assistantMsg)) < 30 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	prompt := fmt.Sprintf(`请评估以下教学对话的质量（0-1分），考虑：
+1. 是否遵守苏格拉底原则（引导而非直接给答案）
+2. 引导是否有效
+3. 是否直接给了答案
+
+学生：%s
+
+导师：%s
+
+请只返回一个 0 到 1 之间的数字，保留两位小数。不要返回其他内容。`, userMsg, assistantMsg)
+
+	messages := []*schema.Message{
+		schema.SystemMessage("你是一个教学质量评估专家。请严格按要求只返回一个数字。"),
+		schema.UserMessage(prompt),
+	}
+
+	resp, err := h.evalModel.Generate(ctx, messages)
+	if err != nil {
+		log.Printf("对话质量评估 LLM 调用失败: %v", err)
+		return
+	}
+
+	content := strings.TrimSpace(resp.Content)
+	var score float64
+	if _, err := fmt.Sscanf(content, "%f", &score); err != nil {
+		log.Printf("对话质量评估解析分数失败 (content=%q): %v", content, err)
+		return
+	}
+
+	// 确保分数在 0-1 范围内
+	if score < 0 {
+		score = 0
+	}
+	if score > 1 {
+		score = 1
+	}
+
+	var convIDPtr *uuid.UUID
+	if convID != uuid.Nil {
+		convIDPtr = &convID
+	}
+
+	details := map[string]interface{}{
+		"user_msg_len":      len([]rune(userMsg)),
+		"assistant_msg_len": len([]rune(assistantMsg)),
+	}
+
+	if err := h.evalRepo.CreateEvaluation(ctx, "chat_quality", convIDPtr, score, details); err != nil {
+		log.Printf("对话质量评估保存失败: %v", err)
+	} else {
+		log.Printf("对话质量评估完成: score=%.2f, conv=%s", score, convID)
 	}
 }

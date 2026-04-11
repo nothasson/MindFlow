@@ -20,12 +20,18 @@ func NewResourceRepo(db *DB) *ResourceRepo {
 }
 
 // Create 创建资料记录。
-func (r *ResourceRepo) Create(ctx context.Context, resource *model.Resource) (*model.Resource, error) {
+// userID 可为 nil，表示无登录状态
+func (r *ResourceRepo) Create(ctx context.Context, resource *model.Resource, userID ...*uuid.UUID) (*model.Resource, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var created model.Resource
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO resources (
-			source_type, title, original_filename, source_url, content_text, pages, chunk_count, status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, user_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, created_at, updated_at
 	`,
 		resource.SourceType,
@@ -36,6 +42,7 @@ func (r *ResourceRepo) Create(ctx context.Context, resource *model.Resource) (*m
 		resource.Pages,
 		resource.ChunkCount,
 		resource.Status,
+		uid,
 	).Scan(
 		&created.ID,
 		&created.SourceType,
@@ -82,11 +89,23 @@ func (r *ResourceRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Resour
 }
 
 // List 获取资料列表
-func (r *ResourceRepo) List(ctx context.Context) ([]model.Resource, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, summary, questions, created_at, updated_at
-		FROM resources ORDER BY created_at DESC LIMIT 50
-	`)
+// userID 可为 nil，表示不按用户过滤
+func (r *ResourceRepo) List(ctx context.Context, userID ...*uuid.UUID) ([]model.Resource, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, summary, questions, created_at, updated_at
+		FROM resources`
+	var args []interface{}
+	if uid != nil {
+		query += ` WHERE (user_id = $1 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY created_at DESC LIMIT 50`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +126,18 @@ func (r *ResourceRepo) List(ctx context.Context) ([]model.Resource, error) {
 }
 
 // Count 获取资料总数
-func (r *ResourceRepo) Count(ctx context.Context) (int, error) {
+// userID 可为 nil，表示不按用户过滤
+func (r *ResourceRepo) Count(ctx context.Context, userID ...*uuid.UUID) (int, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var count int
+	if uid != nil {
+		err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM resources WHERE (user_id = $1 OR user_id IS NULL)`, *uid).Scan(&count)
+		return count, err
+	}
 	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM resources`).Scan(&count)
 	return count, err
 }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,13 +21,19 @@ func NewQuizRepo(db *DB) *QuizRepo {
 }
 
 // CreateAttempt 记录一次答题
-func (r *QuizRepo) CreateAttempt(ctx context.Context, courseID, sectionID *uuid.UUID, question, userAnswer string, isCorrect bool, score int, explanation string) (*model.QuizAttempt, error) {
+// userID 可为 nil，表示无登录状态
+func (r *QuizRepo) CreateAttempt(ctx context.Context, courseID, sectionID *uuid.UUID, question, userAnswer string, isCorrect bool, score int, explanation string, userID ...*uuid.UUID) (*model.QuizAttempt, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var attempt model.QuizAttempt
 	err := r.pool.QueryRow(ctx,
-		`INSERT INTO quiz_attempts (course_id, section_id, question, user_answer, is_correct, score, explanation)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO quiz_attempts (course_id, section_id, question, user_answer, is_correct, score, explanation, user_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING id, course_id, section_id, question, user_answer, is_correct, score, explanation, created_at`,
-		courseID, sectionID, question, userAnswer, isCorrect, score, explanation,
+		courseID, sectionID, question, userAnswer, isCorrect, score, explanation, uid,
 	).Scan(&attempt.ID, &attempt.CourseID, &attempt.SectionID, &attempt.Question,
 		&attempt.UserAnswer, &attempt.IsCorrect, &attempt.Score, &attempt.Explanation, &attempt.CreatedAt)
 	if err != nil {
@@ -36,11 +43,23 @@ func (r *QuizRepo) CreateAttempt(ctx context.Context, courseID, sectionID *uuid.
 }
 
 // GetWrongAnswers 获取错题列表
-func (r *QuizRepo) GetWrongAnswers(ctx context.Context) ([]model.QuizAttempt, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, course_id, section_id, question, user_answer, is_correct, score, explanation, created_at
-		 FROM quiz_attempts WHERE is_correct = FALSE ORDER BY created_at DESC LIMIT 50`,
-	)
+// userID 可为 nil，表示不按用户过滤
+func (r *QuizRepo) GetWrongAnswers(ctx context.Context, userID ...*uuid.UUID) ([]model.QuizAttempt, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT id, course_id, section_id, question, user_answer, is_correct, score, explanation, created_at
+		 FROM quiz_attempts WHERE is_correct = FALSE`
+	var args []interface{}
+	if uid != nil {
+		query += ` AND (user_id = $1 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY created_at DESC LIMIT 50`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -59,34 +78,64 @@ func (r *QuizRepo) GetWrongAnswers(ctx context.Context) ([]model.QuizAttempt, er
 }
 
 // GetStats 获取答题统计
-func (r *QuizRepo) GetStats(ctx context.Context) (total, correct, wrong int, err error) {
-	err = r.pool.QueryRow(ctx,
-		`SELECT COUNT(*), COUNT(*) FILTER (WHERE is_correct), COUNT(*) FILTER (WHERE NOT is_correct)
-		 FROM quiz_attempts`,
-	).Scan(&total, &correct, &wrong)
+// userID 可为 nil，表示不按用户过滤
+func (r *QuizRepo) GetStats(ctx context.Context, userID ...*uuid.UUID) (total, correct, wrong int, err error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	if uid != nil {
+		err = r.pool.QueryRow(ctx,
+			`SELECT COUNT(*), COUNT(*) FILTER (WHERE is_correct), COUNT(*) FILTER (WHERE NOT is_correct)
+			 FROM quiz_attempts WHERE (user_id = $1 OR user_id IS NULL)`, *uid,
+		).Scan(&total, &correct, &wrong)
+	} else {
+		err = r.pool.QueryRow(ctx,
+			`SELECT COUNT(*), COUNT(*) FILTER (WHERE is_correct), COUNT(*) FILTER (WHERE NOT is_correct)
+			 FROM quiz_attempts`,
+		).Scan(&total, &correct, &wrong)
+	}
 	return
 }
 
 // CreateWrongBookEntry 写入错题本
-func (r *QuizRepo) CreateWrongBookEntry(ctx context.Context, attemptID uuid.UUID, concept, errorType string) error {
+// userID 可为 nil，表示无登录状态
+func (r *QuizRepo) CreateWrongBookEntry(ctx context.Context, attemptID uuid.UUID, concept, errorType string, userID ...*uuid.UUID) error {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO wrong_book (quiz_attempt_id, concept, error_type)
-		 VALUES ($1, $2, $3)`,
-		attemptID, concept, errorType,
+		`INSERT INTO wrong_book (quiz_attempt_id, concept, error_type, user_id)
+		 VALUES ($1, $2, $3, $4)`,
+		attemptID, concept, errorType, uid,
 	)
 	return err
 }
 
 // ListWrongBook 获取错题本列表（JOIN 原题内容）
-func (r *QuizRepo) ListWrongBook(ctx context.Context, limit int) ([]model.WrongBookEntry, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT wb.id, wb.quiz_attempt_id, wb.concept, wb.error_type,
+// userID 可为 nil，表示不按用户过滤
+func (r *QuizRepo) ListWrongBook(ctx context.Context, limit int, userID ...*uuid.UUID) ([]model.WrongBookEntry, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT wb.id, wb.quiz_attempt_id, wb.concept, wb.error_type,
 		        COALESCE(qa.question, ''), COALESCE(qa.user_answer, ''),
 		        wb.reviewed, wb.review_count, wb.next_review, wb.created_at
 		 FROM wrong_book wb
-		 LEFT JOIN quiz_attempts qa ON qa.id = wb.quiz_attempt_id
-		 ORDER BY wb.created_at DESC LIMIT $1`, limit,
-	)
+		 LEFT JOIN quiz_attempts qa ON qa.id = wb.quiz_attempt_id`
+	var args []interface{}
+	if uid != nil {
+		query += ` WHERE (wb.user_id = $1 OR wb.user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY wb.created_at DESC LIMIT ` + fmt.Sprintf("%d", limit)
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,10 +161,22 @@ type WrongBookStats struct {
 }
 
 // GetWrongBookStats 获取错题统计
-func (r *QuizRepo) GetWrongBookStats(ctx context.Context) ([]WrongBookStats, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT error_type, COUNT(*) FROM wrong_book WHERE NOT reviewed GROUP BY error_type ORDER BY COUNT(*) DESC`,
-	)
+// userID 可为 nil，表示不按用户过滤
+func (r *QuizRepo) GetWrongBookStats(ctx context.Context, userID ...*uuid.UUID) ([]WrongBookStats, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT error_type, COUNT(*) FROM wrong_book WHERE NOT reviewed`
+	var args []interface{}
+	if uid != nil {
+		query += ` AND (user_id = $1 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` GROUP BY error_type ORDER BY COUNT(*) DESC`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

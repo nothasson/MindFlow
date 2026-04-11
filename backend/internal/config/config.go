@@ -29,6 +29,9 @@ type Config struct {
 
 	// CORS
 	CORSOrigins string
+
+	// JWT 认证
+	JWTSecret string
 }
 
 func Load() *Config {
@@ -46,6 +49,7 @@ func Load() *Config {
 		UploadDir:     getEnv("UPLOAD_DIR", "/data/uploads"),
 		MigrationsDir: getEnv("MIGRATIONS_DIR", "./migrations"),
 		CORSOrigins:   getEnv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"),
+		JWTSecret:     getEnv("JWT_SECRET", "mindflow-dev-secret"),
 	}
 }
 
