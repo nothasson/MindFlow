@@ -213,73 +213,77 @@ func main() {
 		c.JSON(200, utils.H{"active": req.Provider})
 	})
 
-	h.POST("/api/chat", func(ctx context.Context, c *app.RequestContext) {
+	// ===== 受保护路由（需要 JWT 认证）=====
+	// JWT 中间件会将 user_id 注入 context，handler 通过 getUserIDFromCtx 获取
+	protected := h.Group("", handler.JWTAuth(cfg.JWTSecret))
+
+	protected.POST("/api/chat", func(ctx context.Context, c *app.RequestContext) {
 		chatHandler.Handle(ctx, c)
 	})
 
 	// 会话管理路由
-	h.POST("/api/conversations", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/conversations", func(ctx context.Context, c *app.RequestContext) {
 		convHandler.Create(ctx, c)
 	})
-	h.GET("/api/conversations", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/conversations", func(ctx context.Context, c *app.RequestContext) {
 		convHandler.List(ctx, c)
 	})
-	h.GET("/api/conversations/:id", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/conversations/:id", func(ctx context.Context, c *app.RequestContext) {
 		convHandler.GetByID(ctx, c)
 	})
-	h.DELETE("/api/conversations/:id", func(ctx context.Context, c *app.RequestContext) {
+	protected.DELETE("/api/conversations/:id", func(ctx context.Context, c *app.RequestContext) {
 		convHandler.Delete(ctx, c)
 	})
 
 	// 资料上传路由
-	h.POST("/api/resources/upload", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/resources/upload", func(ctx context.Context, c *app.RequestContext) {
 		resourceHandler.Upload(ctx, c)
 	})
-	h.POST("/api/resources/import-url", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/resources/import-url", func(ctx context.Context, c *app.RequestContext) {
 		resourceHandler.ImportURL(ctx, c)
 	})
 
 	// 知识图谱路由
-	h.GET("/api/knowledge/graph", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/knowledge/graph", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.Graph(ctx, c)
 	})
-	h.DELETE("/api/knowledge/concept/:name", func(ctx context.Context, c *app.RequestContext) {
+	protected.DELETE("/api/knowledge/concept/:name", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.DeleteConcept(ctx, c)
 	})
-	h.GET("/api/knowledge/prerequisite-chain", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/knowledge/prerequisite-chain", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.PrerequisiteChain(ctx, c)
 	})
-	h.GET("/api/knowledge/learning-path", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/knowledge/learning-path", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.LearningPath(ctx, c)
 	})
-	h.GET("/api/knowledge/sources", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/knowledge/sources", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.Sources(ctx, c)
 	})
-	h.GET("/api/knowledge/search", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/knowledge/search", func(ctx context.Context, c *app.RequestContext) {
 		knowledgeHandler.SemanticSearch(ctx, c)
 	})
 
 	// 记忆系统路由
 	if memHandler != nil {
-		h.GET("/api/memory/profile", func(ctx context.Context, c *app.RequestContext) {
+		protected.GET("/api/memory/profile", func(ctx context.Context, c *app.RequestContext) {
 			memHandler.Profile(ctx, c)
 		})
-		h.GET("/api/memory/timeline", func(ctx context.Context, c *app.RequestContext) {
+		protected.GET("/api/memory/timeline", func(ctx context.Context, c *app.RequestContext) {
 			memHandler.Timeline(ctx, c)
 		})
-		h.GET("/api/memory/search", func(ctx context.Context, c *app.RequestContext) {
+		protected.GET("/api/memory/search", func(ctx context.Context, c *app.RequestContext) {
 			memHandler.Search(ctx, c)
 		})
 	}
 
 	// 记忆页数据路由
-	h.GET("/api/conversations/recent", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/conversations/recent", func(ctx context.Context, c *app.RequestContext) {
 		memoryPageHandler.RecentConversations(ctx, c)
 	})
-	h.GET("/api/knowledge/recent", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/knowledge/recent", func(ctx context.Context, c *app.RequestContext) {
 		memoryPageHandler.KnowledgeRecent(ctx, c)
 	})
-	h.GET("/api/stats/calendar", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/stats/calendar", func(ctx context.Context, c *app.RequestContext) {
 		memoryPageHandler.CalendarStats(ctx, c)
 	})
 
@@ -289,92 +293,92 @@ func main() {
 	})
 
 	// 课程管理路由
-	h.POST("/api/resources/:id/generate-course", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/resources/:id/generate-course", func(ctx context.Context, c *app.RequestContext) {
 		courseHandler.GenerateFromResource(ctx, c)
 	})
-	h.GET("/api/courses", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/courses", func(ctx context.Context, c *app.RequestContext) {
 		courseHandler.List(ctx, c)
 	})
-	h.GET("/api/courses/:id", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/courses/:id", func(ctx context.Context, c *app.RequestContext) {
 		courseHandler.GetByID(ctx, c)
 	})
-	h.DELETE("/api/courses/:id", func(ctx context.Context, c *app.RequestContext) {
+	protected.DELETE("/api/courses/:id", func(ctx context.Context, c *app.RequestContext) {
 		courseHandler.Delete(ctx, c)
 	})
 
 	// 仪表盘路由
-	h.GET("/api/dashboard/stats", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/dashboard/stats", func(ctx context.Context, c *app.RequestContext) {
 		dashboardHandler.Stats(ctx, c)
 	})
-	h.GET("/api/dashboard/heatmap", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/dashboard/heatmap", func(ctx context.Context, c *app.RequestContext) {
 		dashboardHandler.Heatmap(ctx, c)
 	})
-	h.GET("/api/dashboard/mastery-distribution", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/dashboard/mastery-distribution", func(ctx context.Context, c *app.RequestContext) {
 		dashboardHandler.MasteryDistribution(ctx, c)
 	})
 
 	// 复习计划路由
-	h.GET("/api/review/due", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/review/due", func(ctx context.Context, c *app.RequestContext) {
 		reviewHandler.Due(ctx, c)
 	})
-	h.GET("/api/review/upcoming", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/review/upcoming", func(ctx context.Context, c *app.RequestContext) {
 		reviewHandler.Upcoming(ctx, c)
 	})
 
 	// 答题路由
-	h.POST("/api/quiz/generate", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/quiz/generate", func(ctx context.Context, c *app.RequestContext) {
 		quizHandler.Generate(ctx, c)
 	})
-	h.POST("/api/quiz/submit", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/quiz/submit", func(ctx context.Context, c *app.RequestContext) {
 		quizHandler.Submit(ctx, c)
 	})
-	h.POST("/api/quiz/variant", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/quiz/variant", func(ctx context.Context, c *app.RequestContext) {
 		quizHandler.GenerateVariant(ctx, c)
 	})
-	h.POST("/api/quiz/anki-rate", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/quiz/anki-rate", func(ctx context.Context, c *app.RequestContext) {
 		quizHandler.AnkiRate(ctx, c)
 	})
 
 	// 错题本路由
-	h.GET("/api/wrongbook", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/wrongbook", func(ctx context.Context, c *app.RequestContext) {
 		wrongBookHandler.List(ctx, c)
 	})
-	h.GET("/api/wrongbook/stats", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/wrongbook/stats", func(ctx context.Context, c *app.RequestContext) {
 		wrongBookHandler.Stats(ctx, c)
 	})
-	h.POST("/api/wrongbook/:id/review", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/wrongbook/:id/review", func(ctx context.Context, c *app.RequestContext) {
 		wrongBookHandler.MarkReviewed(ctx, c)
 	})
-	h.DELETE("/api/wrongbook/:id", func(ctx context.Context, c *app.RequestContext) {
+	protected.DELETE("/api/wrongbook/:id", func(ctx context.Context, c *app.RequestContext) {
 		wrongBookHandler.Delete(ctx, c)
 	})
 
 	// 考试计划路由
-	h.POST("/api/exam-plans", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/exam-plans", func(ctx context.Context, c *app.RequestContext) {
 		examHandler.Create(ctx, c)
 	})
-	h.GET("/api/exam-plans", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/exam-plans", func(ctx context.Context, c *app.RequestContext) {
 		examHandler.List(ctx, c)
 	})
-	h.DELETE("/api/exam-plans/:id", func(ctx context.Context, c *app.RequestContext) {
+	protected.DELETE("/api/exam-plans/:id", func(ctx context.Context, c *app.RequestContext) {
 		examHandler.Delete(ctx, c)
 	})
 
 	// 对话式考察路由
-	h.POST("/api/quiz/conversation", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/quiz/conversation", func(ctx context.Context, c *app.RequestContext) {
 		quizHandler.ConversationalQuiz(ctx, c)
 	})
 
 	// 晨间简报路由
-	h.GET("/api/daily-briefing", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/daily-briefing", func(ctx context.Context, c *app.RequestContext) {
 		briefingHandler.GetBriefing(ctx, c)
 	})
 
 	// LLM 评估路由
-	h.GET("/api/evaluations/stats", func(ctx context.Context, c *app.RequestContext) {
+	protected.GET("/api/evaluations/stats", func(ctx context.Context, c *app.RequestContext) {
 		evalHandler.Stats(ctx, c)
 	})
-	h.POST("/api/evaluations", func(ctx context.Context, c *app.RequestContext) {
+	protected.POST("/api/evaluations", func(ctx context.Context, c *app.RequestContext) {
 		evalHandler.Create(ctx, c)
 	})
 
