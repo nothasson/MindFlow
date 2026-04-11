@@ -23,7 +23,8 @@ func NewReviewHandler(knowledgeRepo *repository.KnowledgeRepo) *ReviewHandler {
 
 // Due GET /api/review/due — 今日待复习（含易混淆概念交错排列）
 func (h *ReviewHandler) Due(ctx context.Context, c *app.RequestContext) {
-	items, err := h.knowledgeRepo.GetDueForReview(ctx)
+	userID := getUserIDFromCtx(c)
+	items, err := h.knowledgeRepo.GetDueForReview(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取复习列表失败: " + err.Error()})
 		return
@@ -47,7 +48,8 @@ func (h *ReviewHandler) Due(ctx context.Context, c *app.RequestContext) {
 
 // Upcoming GET /api/review/upcoming — 即将到期（7 天内）
 func (h *ReviewHandler) Upcoming(ctx context.Context, c *app.RequestContext) {
-	items, err := h.knowledgeRepo.GetUpcomingReview(ctx, 7)
+	userID := getUserIDFromCtx(c)
+	items, err := h.knowledgeRepo.GetUpcomingReview(ctx, 7, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取即将到期列表失败: " + err.Error()})
 		return

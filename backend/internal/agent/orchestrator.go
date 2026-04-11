@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
 
@@ -170,17 +171,15 @@ func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (st
 	case AgentTypeCurriculum:
 		reply, err = o.curriculum.Plan(ctx, messages)
 	case AgentTypeDiagnostic:
-		// 先诊断，然后把诊断结果交给 Tutor 做引导式回复（不直接暴露 JSON 给用户）
+		// 先诊断，然后把诊断结果转为自然语言指令交给 Tutor（绝不暴露 JSON）
 		diagResult, diagErr := o.diagnostic.Diagnose(ctx, messages)
 		if diagErr != nil {
 			reply, err = o.tutor.Chat(ctx, messages) // 诊断失败时降级为普通教学
 		} else {
-			// 把诊断结果作为 system 提示注入 tutor
+			tutorHint := formatDiagnosticForTutor(diagResult)
 			augmented := make([]*schema.Message, 0, len(messages)+2)
 			augmented = append(augmented, messages...)
-			augmented = append(augmented, schema.SystemMessage(
-				"以下是对学生回答的诊断结果（仅供你参考，不要直接展示给学生）：\n"+diagResult+
-					"\n请根据诊断结果，用苏格拉底式引导帮助学生改进。"))
+			augmented = append(augmented, schema.SystemMessage(tutorHint))
 			reply, err = o.tutor.Chat(ctx, augmented)
 		}
 	case AgentTypeReview:
@@ -244,16 +243,15 @@ func (o *Orchestrator) ChatStream(ctx context.Context, messages []*schema.Messag
 	case AgentTypeCurriculum:
 		return o.curriculum.PlanStream(ctx, messages)
 	case AgentTypeDiagnostic:
-		// 先同步诊断，再把结果注入 tutor 做流式引导
+		// 先同步诊断，再把结果转为自然语言指令注入 tutor 做流式引导
 		diagResult, diagErr := o.diagnostic.Diagnose(ctx, messages)
 		if diagErr != nil {
 			return o.tutor.ChatStream(ctx, messages)
 		}
+		tutorHint := formatDiagnosticForTutor(diagResult)
 		augmented := make([]*schema.Message, 0, len(messages)+2)
 		augmented = append(augmented, messages...)
-		augmented = append(augmented, schema.SystemMessage(
-			"以下是对学生回答的诊断结果（仅供你参考，不要直接展示给学生）：\n"+diagResult+
-				"\n请根据诊断结果，用苏格拉底式引导帮助学生改进。"))
+		augmented = append(augmented, schema.SystemMessage(tutorHint))
 		return o.tutor.ChatStream(ctx, augmented)
 	case AgentTypeReview:
 		return o.review.ReviewStream(ctx, messages)
@@ -410,4 +408,51 @@ func (o *Orchestrator) supportLevelHint(level string) string {
 	default:
 		return ""
 	}
+}
+
+// formatDiagnosticForTutor 把诊断 JSON 转为自然语言教学指令，
+// 避免 LLM 直接把 JSON 回显给学生。
+func formatDiagnosticForTutor(rawDiag string) string {
+	result, err := ParseDiagnosticResult(rawDiag)
+	if err != nil {
+		log.Printf("诊断结果解析失败: %v，原始数据: %s", err, rawDiag[:min(len(rawDiag), 100)])
+		return "[内部教学指令] 学生的回答需要引导改进。请用苏格拉底式提问帮助学生思考，用自然的中文对话回复。"
+	}
+
+	var b strings.Builder
+	b.WriteString("[内部教学指令 - 严禁将以下内容原样展示给学生，你必须用自然对话回复]\n\n")
+
+	switch result.Correctness {
+	case "correct":
+		b.WriteString("学生回答正确。请肯定学生的思路，然后用追问推进到更深层的理解。\n")
+	case "partial":
+		b.WriteString("学生回答部分正确。请先肯定正确的部分，然后用引导性问题帮助学生发现不足之处。\n")
+	case "wrong":
+		b.WriteString("学生回答有误。请不要直说「错了」，用反例或引导性问题帮助学生自己发现问题。\n")
+	default:
+		b.WriteString("请根据学生的回答给予引导。\n")
+	}
+
+	if result.PrimaryError.Type != "none" && result.PrimaryError.Type != "" {
+		b.WriteString(fmt.Sprintf("主要问题：%s\n", result.PrimaryError.Description))
+	}
+
+	if result.MetacognitiveError.Type != "none" && result.MetacognitiveError.Type != "" {
+		b.WriteString(fmt.Sprintf("元认知问题：%s\n", result.MetacognitiveError.Description))
+	}
+
+	if result.Analysis != "" {
+		b.WriteString(fmt.Sprintf("分析：%s\n", result.Analysis))
+	}
+
+	if result.GuidanceStrategy != "" {
+		b.WriteString(fmt.Sprintf("建议引导方式：%s\n", result.GuidanceStrategy))
+	}
+
+	if result.PrerequisiteGap != nil && *result.PrerequisiteGap != "" {
+		b.WriteString(fmt.Sprintf("学生可能缺少前置知识：%s，可以先补充这部分。\n", *result.PrerequisiteGap))
+	}
+
+	b.WriteString("\n请用自然的中文对话回复学生，语气鼓励正面，以一个引导性问题结尾。绝对不要输出 JSON 或提及诊断结果。")
+	return b.String()
 }

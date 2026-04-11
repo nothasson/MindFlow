@@ -97,7 +97,8 @@ func (h *ChatHandler) Handle(ctx context.Context, c *app.RequestContext) {
 	var convID uuid.UUID
 	if h.convRepo != nil {
 		var err error
-		convID, err = h.ensureConversation(ctx, req)
+		userID := getUserIDFromCtx(c)
+		convID, err = h.ensureConversation(ctx, req, userID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, utils.H{"error": "会话管理失败: " + err.Error()})
 			return
@@ -137,7 +138,7 @@ func (h *ChatHandler) Handle(ctx context.Context, c *app.RequestContext) {
 }
 
 // ensureConversation 获取或创建会话
-func (h *ChatHandler) ensureConversation(ctx context.Context, req ChatRequest) (uuid.UUID, error) {
+func (h *ChatHandler) ensureConversation(ctx context.Context, req ChatRequest, userID *uuid.UUID) (uuid.UUID, error) {
 	if req.ConversationID != "" {
 		id, err := uuid.Parse(req.ConversationID)
 		if err != nil {
@@ -159,7 +160,7 @@ func (h *ChatHandler) ensureConversation(ctx context.Context, req ChatRequest) (
 		}
 	}
 
-	conv, err := h.convRepo.Create(ctx, title)
+	conv, err := h.convRepo.Create(ctx, title, userID)
 	if err != nil {
 		return uuid.Nil, err
 	}

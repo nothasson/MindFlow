@@ -26,7 +26,8 @@ func NewMemoryPageHandler(convRepo *repository.ConversationRepo, msgRepo *reposi
 
 // RecentConversations GET /api/conversations/recent
 func (h *MemoryPageHandler) RecentConversations(ctx context.Context, c *app.RequestContext) {
-	convs, err := h.convRepo.List(ctx)
+	userID := getUserIDFromCtx(c)
+	convs, err := h.convRepo.List(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取对话列表失败"})
 		return
@@ -88,7 +89,8 @@ func (h *MemoryPageHandler) RecentConversations(ctx context.Context, c *app.Requ
 
 // KnowledgeRecent GET /api/knowledge/recent
 func (h *MemoryPageHandler) KnowledgeRecent(ctx context.Context, c *app.RequestContext) {
-	nodes, err := h.knowledgeRepo.ListNodes(ctx)
+	userID := getUserIDFromCtx(c)
+	nodes, err := h.knowledgeRepo.ListNodes(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取知识点失败"})
 		return
@@ -139,7 +141,8 @@ func (h *MemoryPageHandler) KnowledgeRecent(ctx context.Context, c *app.RequestC
 
 // CalendarStats GET /api/stats/calendar
 func (h *MemoryPageHandler) CalendarStats(ctx context.Context, c *app.RequestContext) {
-	days, err := h.msgRepo.CountByDay(ctx, 31)
+	userID := getUserIDFromCtx(c)
+	days, err := h.msgRepo.CountByDay(ctx, 31, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取日历数据失败"})
 		return

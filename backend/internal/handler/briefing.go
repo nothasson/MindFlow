@@ -17,12 +17,16 @@ import (
 	"github.com/nothasson/MindFlow/backend/internal/repository"
 )
 
-// 晨间简报缓存（30 分钟有效期，避免每次打开首页都调 LLM）
+// 晨间简报缓存（30 分钟有效期，按用户隔离）
+type briefingCacheEntry struct {
+	response *BriefingResponse
+	time     time.Time
+}
+
 var (
-	briefingCache     *BriefingResponse
-	briefingCacheTime time.Time
-	briefingCacheMu   sync.Mutex
-	briefingCacheTTL  = 30 * time.Minute
+	briefingCacheMap = make(map[string]*briefingCacheEntry)
+	briefingCacheMu  sync.Mutex
+	briefingCacheTTL = 30 * time.Minute
 )
 
 // BriefingHandler 晨间简报 API 处理器
@@ -65,10 +69,18 @@ type BriefingResponse struct {
 
 // GetBriefing GET /api/daily-briefing — 生成今日学习简报
 func (h *BriefingHandler) GetBriefing(ctx context.Context, c *app.RequestContext) {
+	userID := getUserIDFromCtx(c)
+
+	// 按用户隔离缓存
+	cacheKey := "_anonymous_"
+	if userID != nil {
+		cacheKey = userID.String()
+	}
+
 	// 检查缓存：30 分钟内直接返回缓存结果
 	briefingCacheMu.Lock()
-	if briefingCache != nil && time.Since(briefingCacheTime) < briefingCacheTTL {
-		cached := briefingCache
+	if entry, ok := briefingCacheMap[cacheKey]; ok && time.Since(entry.time) < briefingCacheTTL {
+		cached := entry.response
 		briefingCacheMu.Unlock()
 		c.JSON(http.StatusOK, utils.H{"briefing": cached})
 		return
@@ -82,7 +94,7 @@ func (h *BriefingHandler) GetBriefing(ctx context.Context, c *app.RequestContext
 	var contextParts []string
 
 	// 1. 到期复习项
-	dueItems, err := h.knowledgeRepo.GetDueForReview(genCtx)
+	dueItems, err := h.knowledgeRepo.GetDueForReview(genCtx, userID)
 	if err != nil {
 		log.Printf("获取到期复习项失败: %v", err)
 	} else if len(dueItems) > 0 {
@@ -98,7 +110,7 @@ func (h *BriefingHandler) GetBriefing(ctx context.Context, c *app.RequestContext
 	}
 
 	// 2. 薄弱知识点 Top5
-	weakPoints, err := h.knowledgeRepo.GetWeakPoints(genCtx, 5)
+	weakPoints, err := h.knowledgeRepo.GetWeakPoints(genCtx, 5, userID)
 	if err != nil {
 		log.Printf("获取薄弱知识点失败: %v", err)
 	} else if len(weakPoints) > 0 {
@@ -113,7 +125,7 @@ func (h *BriefingHandler) GetBriefing(ctx context.Context, c *app.RequestContext
 	}
 
 	// 3. 最近错题
-	wrongAnswers, err := h.quizRepo.GetWrongAnswers(genCtx)
+	wrongAnswers, err := h.quizRepo.GetWrongAnswers(genCtx, userID)
 	if err != nil {
 		log.Printf("获取错题列表失败: %v", err)
 	} else if len(wrongAnswers) > 0 {
@@ -137,7 +149,7 @@ func (h *BriefingHandler) GetBriefing(ctx context.Context, c *app.RequestContext
 	}
 
 	// 4. 最近会话数
-	convCount, err := h.convRepo.Count(genCtx)
+	convCount, err := h.convRepo.Count(genCtx, userID)
 	if err != nil {
 		log.Printf("获取会话数失败: %v", err)
 	} else {
@@ -145,7 +157,7 @@ func (h *BriefingHandler) GetBriefing(ctx context.Context, c *app.RequestContext
 	}
 
 	// 5. 学习天数
-	studyDays, err := h.convRepo.CountDistinctDays(genCtx)
+	studyDays, err := h.convRepo.CountDistinctDays(genCtx, userID)
 	if err != nil {
 		log.Printf("获取学习天数失败: %v", err)
 	} else {
@@ -209,10 +221,9 @@ func (h *BriefingHandler) GetBriefing(ctx context.Context, c *app.RequestContext
 		briefing.NewItems = []BriefingItem{}
 	}
 
-	// 写入缓存
+	// 写入缓存（按用户隔离）
 	briefingCacheMu.Lock()
-	briefingCache = &briefing
-	briefingCacheTime = time.Now()
+	briefingCacheMap[cacheKey] = &briefingCacheEntry{response: &briefing, time: time.Now()}
 	briefingCacheMu.Unlock()
 
 	c.JSON(http.StatusOK, utils.H{"briefing": briefing})

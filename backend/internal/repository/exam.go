@@ -21,13 +21,17 @@ func NewExamRepo(db *DB) *ExamRepo {
 }
 
 // CreateExamPlan 创建考试计划
-func (r *ExamRepo) CreateExamPlan(ctx context.Context, title string, examDate string, concepts []string, accelerationFactor float64) (*model.ExamPlan, error) {
+func (r *ExamRepo) CreateExamPlan(ctx context.Context, title string, examDate string, concepts []string, accelerationFactor float64, userID ...*uuid.UUID) (*model.ExamPlan, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
 	var plan model.ExamPlan
 	err := r.pool.QueryRow(ctx,
-		`INSERT INTO exam_plans (title, exam_date, concepts, acceleration_factor)
-		 VALUES ($1, $2::date, $3, $4)
+		`INSERT INTO exam_plans (title, exam_date, concepts, acceleration_factor, user_id)
+		 VALUES ($1, $2::date, $3, $4, $5)
 		 RETURNING id, title, exam_date, concepts, acceleration_factor, active, created_at`,
-		title, examDate, concepts, accelerationFactor,
+		title, examDate, concepts, accelerationFactor, uid,
 	).Scan(&plan.ID, &plan.Title, &plan.ExamDate, &plan.Concepts,
 		&plan.AccelerationFactor, &plan.Active, &plan.CreatedAt)
 	if err != nil {
@@ -37,11 +41,22 @@ func (r *ExamRepo) CreateExamPlan(ctx context.Context, title string, examDate st
 }
 
 // ListExamPlans 列出所有考试计划
-func (r *ExamRepo) ListExamPlans(ctx context.Context) ([]model.ExamPlan, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, title, exam_date, concepts, acceleration_factor, active, created_at
-		 FROM exam_plans ORDER BY exam_date ASC`,
-	)
+func (r *ExamRepo) ListExamPlans(ctx context.Context, userID ...*uuid.UUID) ([]model.ExamPlan, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+	var query string
+	var args []interface{}
+	if uid != nil {
+		query = `SELECT id, title, exam_date, concepts, acceleration_factor, active, created_at
+		 FROM exam_plans WHERE user_id = $1 ORDER BY exam_date ASC`
+		args = []interface{}{*uid}
+	} else {
+		query = `SELECT id, title, exam_date, concepts, acceleration_factor, active, created_at
+		 FROM exam_plans WHERE user_id IS NULL ORDER BY exam_date ASC`
+	}
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("查询考试计划失败: %w", err)
 	}
@@ -74,8 +89,21 @@ func (r *ExamRepo) GetActiveExamPlan(ctx context.Context) (*model.ExamPlan, erro
 }
 
 // DeleteExamPlan 删除考试计划
-func (r *ExamRepo) DeleteExamPlan(ctx context.Context, id uuid.UUID) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM exam_plans WHERE id = $1`, id)
+// userID 非 nil 时加归属校验
+func (r *ExamRepo) DeleteExamPlan(ctx context.Context, id uuid.UUID, userID ...*uuid.UUID) error {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `DELETE FROM exam_plans WHERE id = $1`
+	args := []interface{}{id}
+	if uid != nil {
+		query += ` AND (user_id = $2 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+
+	_, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("删除考试计划失败: %w", err)
 	}

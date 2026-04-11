@@ -171,8 +171,8 @@ export default function Home() {
           )}
           {briefing && !briefingCollapsed && (
             <div className="mb-4 w-full max-w-[46rem] rounded-xl border border-stone-200 bg-white px-4 py-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="truncate text-xs text-stone-500">📋 {briefing.greeting}</span>
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <span className="text-xs leading-relaxed text-stone-500">📋 {briefing.greeting}</span>
                 <button
                   type="button"
                   onClick={() => setBriefingCollapsed(true)}

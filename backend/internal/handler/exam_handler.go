@@ -24,6 +24,7 @@ func NewExamHandler(examRepo *repository.ExamRepo) *ExamHandler {
 
 // Create POST /api/exam-plans — 创建考试计划
 func (h *ExamHandler) Create(ctx context.Context, c *app.RequestContext) {
+	userID := getUserIDFromCtx(c)
 	var req struct {
 		Title              string   `json:"title"`
 		ExamDate           string   `json:"exam_date"`
@@ -45,7 +46,7 @@ func (h *ExamHandler) Create(ctx context.Context, c *app.RequestContext) {
 		req.Concepts = []string{}
 	}
 
-	plan, err := h.examRepo.CreateExamPlan(ctx, req.Title, req.ExamDate, req.Concepts, req.AccelerationFactor)
+	plan, err := h.examRepo.CreateExamPlan(ctx, req.Title, req.ExamDate, req.Concepts, req.AccelerationFactor, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "创建考试计划失败: " + err.Error()})
 		return
@@ -56,7 +57,8 @@ func (h *ExamHandler) Create(ctx context.Context, c *app.RequestContext) {
 
 // List GET /api/exam-plans — 列出所有考试计划
 func (h *ExamHandler) List(ctx context.Context, c *app.RequestContext) {
-	plans, err := h.examRepo.ListExamPlans(ctx)
+	userID := getUserIDFromCtx(c)
+	plans, err := h.examRepo.ListExamPlans(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "查询考试计划失败: " + err.Error()})
 		return
@@ -76,7 +78,7 @@ func (h *ExamHandler) Delete(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	if err := h.examRepo.DeleteExamPlan(ctx, id); err != nil {
+	if err := h.examRepo.DeleteExamPlan(ctx, id, getUserIDFromCtx(c)); err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "删除失败: " + err.Error()})
 		return
 	}

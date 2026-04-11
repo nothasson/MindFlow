@@ -23,7 +23,8 @@ func NewWrongBookHandler(quizRepo *repository.QuizRepo) *WrongBookHandler {
 
 // List GET /api/wrongbook — 错题列表
 func (h *WrongBookHandler) List(ctx context.Context, c *app.RequestContext) {
-	entries, err := h.quizRepo.ListWrongBook(ctx, 50)
+	userID := getUserIDFromCtx(c)
+	entries, err := h.quizRepo.ListWrongBook(ctx, 50, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取错题本失败: " + err.Error()})
 		return
@@ -37,7 +38,8 @@ func (h *WrongBookHandler) List(ctx context.Context, c *app.RequestContext) {
 
 // Stats GET /api/wrongbook/stats — 按错误类型分组统计
 func (h *WrongBookHandler) Stats(ctx context.Context, c *app.RequestContext) {
-	stats, err := h.quizRepo.GetWrongBookStats(ctx)
+	userID := getUserIDFromCtx(c)
+	stats, err := h.quizRepo.GetWrongBookStats(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取错题统计失败: " + err.Error()})
 		return

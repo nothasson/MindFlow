@@ -26,7 +26,7 @@ func NewConversationHandler(convRepo *repository.ConversationRepo, msgRepo *repo
 
 // Create POST /api/conversations
 func (h *ConversationHandler) Create(ctx context.Context, c *app.RequestContext) {
-	conv, err := h.convRepo.Create(ctx, "")
+	conv, err := h.convRepo.Create(ctx, "", getUserIDFromCtx(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "创建会话失败: " + err.Error()})
 		return
@@ -36,7 +36,7 @@ func (h *ConversationHandler) Create(ctx context.Context, c *app.RequestContext)
 
 // List GET /api/conversations
 func (h *ConversationHandler) List(ctx context.Context, c *app.RequestContext) {
-	convs, err := h.convRepo.List(ctx)
+	convs, err := h.convRepo.List(ctx, getUserIDFromCtx(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取会话列表失败: " + err.Error()})
 		return
@@ -56,7 +56,8 @@ func (h *ConversationHandler) GetByID(ctx context.Context, c *app.RequestContext
 		return
 	}
 
-	conv, err := h.convRepo.GetByID(ctx, id)
+	userID := getUserIDFromCtx(c)
+	conv, err := h.convRepo.GetByID(ctx, id, userID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, utils.H{"error": "会话不存在"})
 		return
@@ -80,7 +81,7 @@ func (h *ConversationHandler) Delete(ctx context.Context, c *app.RequestContext)
 		return
 	}
 
-	if err := h.convRepo.Delete(ctx, id); err != nil {
+	if err := h.convRepo.Delete(ctx, id, getUserIDFromCtx(c)); err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "删除会话失败: " + err.Error()})
 		return
 	}

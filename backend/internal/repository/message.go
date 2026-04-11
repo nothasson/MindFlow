@@ -70,15 +70,29 @@ type DayCount struct {
 }
 
 // CountByDay 获取最近 N 天每天的消息数
-func (r *MessageRepo) CountByDay(ctx context.Context, days int) ([]DayCount, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT DATE(created_at) as day, COUNT(*) as cnt
-		 FROM messages
-		 WHERE created_at >= NOW() - make_interval(days => $1)
-		 GROUP BY DATE(created_at)
-		 ORDER BY day`,
-		days,
-	)
+// userID 非 nil 时通过 conversations 表做归属过滤
+func (r *MessageRepo) CountByDay(ctx context.Context, days int, userID ...*uuid.UUID) ([]DayCount, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT DATE(m.created_at) as day, COUNT(*) as cnt
+		 FROM messages m`
+	args := []interface{}{days}
+
+	if uid != nil {
+		query += ` JOIN conversations c ON c.id = m.conversation_id
+		 WHERE m.created_at >= NOW() - make_interval(days => $1)
+		 AND (c.user_id = $2 OR c.user_id IS NULL)`
+		args = append(args, *uid)
+	} else {
+		query += ` WHERE m.created_at >= NOW() - make_interval(days => $1)`
+	}
+
+	query += ` GROUP BY DATE(m.created_at) ORDER BY day`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -44,7 +44,9 @@ func (h *KnowledgeHandler) SetAIClient(client knowledgeAIClient) {
 // Graph GET /api/knowledge/graph
 // 返回知识图谱的节点和边
 func (h *KnowledgeHandler) Graph(ctx context.Context, c *app.RequestContext) {
-	nodes, err := h.repo.ListNodes(ctx)
+	userID := getUserIDFromCtx(c)
+
+	nodes, err := h.repo.ListNodes(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取知识点失败: " + err.Error()})
 		return
@@ -94,7 +96,9 @@ func (h *KnowledgeHandler) PrerequisiteChain(ctx context.Context, c *app.Request
 // LearningPath GET /api/knowledge/learning-path
 // 基于知识图谱拓扑排序生成学习路径
 func (h *KnowledgeHandler) LearningPath(ctx context.Context, c *app.RequestContext) {
-	nodes, err := h.repo.ListNodes(ctx)
+	userID := getUserIDFromCtx(c)
+
+	nodes, err := h.repo.ListNodes(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取知识点失败: " + err.Error()})
 		return

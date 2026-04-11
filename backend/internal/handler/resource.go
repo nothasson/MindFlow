@@ -112,6 +112,7 @@ func (h *ResourceHandler) Upload(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	userID := getUserIDFromCtx(c)
 	h.ingestResource(ctx, c, ingestInput{
 		SourceType:       "file",
 		Title:            parseResult.Filename,
@@ -119,7 +120,7 @@ func (h *ResourceHandler) Upload(ctx context.Context, c *app.RequestContext) {
 		OriginalFilename: parseResult.Filename,
 		ContentText:      parseResult.Text,
 		Pages:            parseResult.Pages,
-	})
+	}, userID)
 }
 
 // ImportURL POST /api/resources/import-url
@@ -151,6 +152,7 @@ func (h *ResourceHandler) ImportURL(ctx context.Context, c *app.RequestContext) 
 		displayName = url
 	}
 
+	userID := getUserIDFromCtx(c)
 	h.ingestResource(ctx, c, ingestInput{
 		SourceType:       "url",
 		Title:            displayName,
@@ -159,7 +161,7 @@ func (h *ResourceHandler) ImportURL(ctx context.Context, c *app.RequestContext) 
 		SourceURL:        parseResult.SourceURL,
 		ContentText:      parseResult.Text,
 		Pages:            1,
-	})
+	}, userID)
 }
 
 type ingestInput struct {
@@ -184,7 +186,7 @@ func (h *ResourceHandler) ensureReady(c *app.RequestContext) error {
 	return nil
 }
 
-func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestContext, input ingestInput) {
+func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestContext, input ingestInput, userID *uuid.UUID) {
 	chunks := splitText(input.ContentText, 500)
 	resource, err := h.resourceStore.Create(ctx, &mdl.Resource{
 		SourceType:       input.SourceType,
@@ -195,7 +197,7 @@ func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestCont
 		Pages:            input.Pages,
 		ChunkCount:       len(chunks),
 		Status:           "parsed",
-	})
+	}, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "保存资料失败: " + err.Error()})
 		return

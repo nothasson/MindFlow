@@ -39,6 +39,8 @@ func (h *QuizHandler) SetSourceLinkRepo(repo *repository.SourceLinkRepo) {
 // Generate POST /api/quiz/generate — 给定概念出题
 // 优先查询学生掌握度，使用 Bloom 认知分类法出题；查不到则降级为普通出题
 func (h *QuizHandler) Generate(ctx context.Context, c *app.RequestContext) {
+	userID := getUserIDFromCtx(c)
+	_ = userID // Generate 当前无需传 userID 到 repo，预留
 	var req struct {
 		Concept string `json:"concept"`
 	}
@@ -92,6 +94,7 @@ func (h *QuizHandler) Generate(ctx context.Context, c *app.RequestContext) {
 
 // Submit POST /api/quiz/submit — 提交答案，用 LLM 评分
 func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
+	userID := getUserIDFromCtx(c)
 	var req struct {
 		Concept  string `json:"concept"`
 		Question string `json:"question"`
@@ -121,7 +124,7 @@ func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 
 	// 记录答题
 	if h.quizRepo != nil {
-		attempt, createErr := h.quizRepo.CreateAttempt(ctx, nil, nil, req.Question, req.Answer, isCorrect, score, explanation)
+		attempt, createErr := h.quizRepo.CreateAttempt(ctx, nil, nil, req.Question, req.Answer, isCorrect, score, explanation, userID)
 		if createErr != nil {
 			log.Printf("记录答题失败: %v", createErr)
 		} else if attempt != nil {
@@ -138,7 +141,7 @@ func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 				if score <= 1 {
 					errorType = "concept_error"
 				}
-				if wbErr := h.quizRepo.CreateWrongBookEntry(ctx, attempt.ID, req.Concept, errorType); wbErr != nil {
+				if wbErr := h.quizRepo.CreateWrongBookEntry(ctx, attempt.ID, req.Concept, errorType, userID); wbErr != nil {
 					log.Printf("写入错题本失败: %v", wbErr)
 				}
 			}
@@ -163,6 +166,8 @@ func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 
 // GenerateVariant POST /api/quiz/variant — 根据错题生成变式题
 func (h *QuizHandler) GenerateVariant(ctx context.Context, c *app.RequestContext) {
+	userID := getUserIDFromCtx(c)
+	_ = userID // 预留
 	var req struct {
 		Concept    string `json:"concept"`
 		Question   string `json:"question"`
@@ -198,6 +203,8 @@ func (h *QuizHandler) GenerateVariant(ctx context.Context, c *app.RequestContext
 
 // ConversationalQuiz POST /api/quiz/conversation — 对话式考察
 func (h *QuizHandler) ConversationalQuiz(ctx context.Context, c *app.RequestContext) {
+	userID := getUserIDFromCtx(c)
+	_ = userID // 预留
 	var req struct {
 		Concept string `json:"concept"`
 		Message string `json:"message"`
@@ -269,6 +276,8 @@ func (h *QuizHandler) ConversationalQuiz(ctx context.Context, c *app.RequestCont
 
 // AnkiRate POST /api/quiz/anki-rate — Anki 卡片评分，直接更新 FSRS 掌握度
 func (h *QuizHandler) AnkiRate(ctx context.Context, c *app.RequestContext) {
+	userID := getUserIDFromCtx(c)
+	_ = userID // 预留
 	var req struct {
 		Concept string `json:"concept"`
 		Rating  int    `json:"rating"` // 1=Again, 2=Hard, 3=Good, 4=Easy

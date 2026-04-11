@@ -40,12 +40,22 @@ func (r *ConversationRepo) Create(ctx context.Context, title string, userID ...*
 }
 
 // GetByID 按 ID 获取会话
-func (r *ConversationRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Conversation, error) {
+// userID 非 nil 时加归属校验
+func (r *ConversationRepo) GetByID(ctx context.Context, id uuid.UUID, userID ...*uuid.UUID) (*model.Conversation, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT id, title, created_at, updated_at FROM conversations WHERE id = $1`
+	args := []interface{}{id}
+	if uid != nil {
+		query += ` AND (user_id = $2 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+
 	var conv model.Conversation
-	err := r.pool.QueryRow(ctx,
-		`SELECT id, title, created_at, updated_at FROM conversations WHERE id = $1`,
-		id,
-	).Scan(&conv.ID, &conv.Title, &conv.CreatedAt, &conv.UpdatedAt)
+	err := r.pool.QueryRow(ctx, query, args...).Scan(&conv.ID, &conv.Title, &conv.CreatedAt, &conv.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -104,11 +114,21 @@ func (r *ConversationRepo) TouchUpdatedAt(ctx context.Context, id uuid.UUID) err
 }
 
 // Delete 删除会话
-func (r *ConversationRepo) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.pool.Exec(ctx,
-		`DELETE FROM conversations WHERE id = $1`,
-		id,
-	)
+// userID 非 nil 时加归属校验
+func (r *ConversationRepo) Delete(ctx context.Context, id uuid.UUID, userID ...*uuid.UUID) error {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `DELETE FROM conversations WHERE id = $1`
+	args := []interface{}{id}
+	if uid != nil {
+		query += ` AND (user_id = $2 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+
+	_, err := r.pool.Exec(ctx, query, args...)
 	return err
 }
 
