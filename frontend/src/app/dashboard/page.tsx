@@ -361,14 +361,7 @@ export default function DashboardPage() {
               <h1 className="mb-2 text-2xl font-semibold text-stone-800">
                 学习数据
               </h1>
-              <div className="flex gap-2">
-                <Link href="/review" className="rounded-lg border border-stone-200 px-3 py-1 text-xs text-stone-600 transition hover:bg-stone-100">
-                  复习计划
-                </Link>
-                <Link href="/memory" className="rounded-lg border border-stone-200 px-3 py-1 text-xs text-stone-600 transition hover:bg-stone-100">
-                  学习历程
-                </Link>
-              </div>
+              <p className="text-sm text-stone-500">跟踪你的学习进度和知识掌握情况</p>
             </div>
             {streakDays > 0 && (
               <div className="flex shrink-0 items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2">
@@ -491,6 +484,40 @@ export default function DashboardPage() {
                 </p>
               )}
             </div>
+          </div>
+
+          {/* 快捷入口 */}
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <Link
+              href="/review"
+              className="group flex items-center gap-4 rounded-2xl border border-stone-200 bg-white p-5 transition hover:border-[#C67A4A]/40 hover:shadow-sm"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C67A4A]/10 text-[#C67A4A] transition group-hover:bg-[#C67A4A]/20">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 8v4l3 3" />
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-stone-800">复习计划</p>
+                <p className="text-xs text-stone-400">基于遗忘曲线安排复习</p>
+              </div>
+            </Link>
+            <Link
+              href="/memory"
+              className="group flex items-center gap-4 rounded-2xl border border-stone-200 bg-white p-5 transition hover:border-[#C67A4A]/40 hover:shadow-sm"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C67A4A]/10 text-[#C67A4A] transition group-hover:bg-[#C67A4A]/20">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
+                  <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-stone-800">学习历程</p>
+                <p className="text-xs text-stone-400">回顾对话和学习轨迹</p>
+              </div>
+            </Link>
           </div>
 
           {/* 学习趋势 */}

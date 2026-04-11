@@ -214,7 +214,8 @@ export default function SettingsPage() {
 
   return (
     <MainShell>
-      <div className="mx-auto max-w-2xl px-6 py-16">
+      <div className="flex h-full flex-col bg-[#EEECE2]">
+        <div className="mx-auto w-full max-w-2xl overflow-y-auto px-6 py-16">
         <h1 className="text-2xl font-semibold text-stone-800">设置</h1>
         <p className="mt-1 text-sm text-stone-500">管理 AI 模型提供方和系统偏好</p>
 
@@ -480,6 +481,7 @@ export default function SettingsPage() {
         {success ? (
           <div className="mt-6 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">{success}</div>
         ) : null}
+        </div>
       </div>
     </MainShell>
   );

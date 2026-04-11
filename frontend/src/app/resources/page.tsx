@@ -104,11 +104,12 @@ export default function ResourcesPage() {
   return (
     <MainShell>
       <div className="flex h-full flex-col bg-[#EEECE2]">
-        <div className="mx-auto w-full max-w-3xl px-4 py-12">
+        <div className="mx-auto w-full max-w-3xl overflow-y-auto px-4 py-12">
           <h1 className="mb-2 text-2xl font-semibold text-stone-800">资料库</h1>
           <p className="mb-8 text-sm text-stone-500">
             上传学习资料，或直接粘贴网页链接，AI 会自动解析并基于内容进行教学。
           </p>
+
 
           <div
             onDragOver={(e) => e.preventDefault()}

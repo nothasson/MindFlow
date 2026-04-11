@@ -91,7 +91,19 @@ export default function MemoryPage() {
     <MainShell>
       <div className="flex h-full flex-col bg-[#EEECE2]">
         <div className="mx-auto w-full max-w-4xl overflow-y-auto px-4 py-12">
-          <h1 className="mb-2 text-2xl font-semibold text-stone-800">学习历程</h1>
+          <div className="mb-2 flex items-center gap-3">
+            <Link
+              href="/dashboard"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 transition hover:bg-stone-200 hover:text-stone-600"
+              title="返回学习数据"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5" />
+                <path d="M12 19l-7-7 7-7" />
+              </svg>
+            </Link>
+            <h1 className="text-2xl font-semibold text-stone-800">学习历程</h1>
+          </div>
           <p className="mb-8 text-sm text-stone-500">
             回顾你的学习轨迹，快速继续未完成的对话。
           </p>

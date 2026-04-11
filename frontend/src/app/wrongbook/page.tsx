@@ -101,7 +101,19 @@ export default function WrongBookPage() {
         <div className="mx-auto w-full max-w-3xl overflow-y-auto px-4 py-12">
           <div className="mb-8 flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-stone-800">错题本</h1>
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/quiz"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 transition hover:bg-stone-200 hover:text-stone-600"
+                  title="返回测验"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 12H5" />
+                    <path d="M12 19l-7-7 7-7" />
+                  </svg>
+                </Link>
+                <h1 className="text-2xl font-semibold text-stone-800">错题本</h1>
+              </div>
               <p className="text-sm text-stone-500">
                 {totalUnreviewed > 0 ? `${totalUnreviewed} 道待复习` : "暂无待复习错题"}
               </p>
