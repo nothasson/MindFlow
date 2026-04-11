@@ -14,18 +14,43 @@ interface SimNode extends KnowledgeNode {
   y: number;
   vx: number;
   vy: number;
+  fx?: number; // 固定位置（拖拽时）
+  fy?: number;
+}
+
+/** 画布变换状态 */
+interface Transform {
+  offsetX: number;
+  offsetY: number;
+  scale: number;
 }
 
 function confidenceColor(confidence: number): string {
-  if (confidence >= 0.8) return "#6b8e6b"; // 柔和绿
-  if (confidence >= 0.4) return "#c4a54a"; // 柔和黄
-  return "#c07060"; // 柔和红
+  if (confidence > 0.7) return "#6b9e78";  // 柔和绿
+  if (confidence >= 0.3) return "#c4a54d"; // 柔和黄
+  return "#c47a6c"; // 柔和红
 }
 
 function confidenceLabel(confidence: number): string {
-  if (confidence >= 0.8) return "已掌握";
-  if (confidence >= 0.4) return "学习中";
+  if (confidence > 0.7) return "已掌握";
+  if (confidence >= 0.3) return "学习中";
   return "薄弱";
+}
+
+/** 计算节点半径：基础 28，每条关联边 +3，上限 55 */
+function nodeRadius(concept: string, edges: KnowledgeEdge[]): number {
+  const count = edges.filter((e) => e.from === concept || e.to === concept).length;
+  return Math.min(55, 28 + count * 3);
+}
+
+/** 将长文字拆成多行（每行最多 maxChars 字） */
+function wrapText(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return [text];
+  const lines: string[] = [];
+  for (let i = 0; i < text.length; i += maxChars) {
+    lines.push(text.slice(i, i + maxChars));
+  }
+  return lines;
 }
 
 export default function KnowledgePage() {
@@ -38,9 +63,21 @@ export default function KnowledgePage() {
   const [sources, setSources] = useState<KnowledgeSourceLink[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
 
-  const svgRef = useRef<SVGSVGElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const simNodesRef = useRef<SimNode[]>([]);
   const animRef = useRef<number>(0);
+
+  // 拖拽状态
+  const dragNodeRef = useRef<SimNode | null>(null);
+  const isDraggingRef = useRef(false);
+
+  // 画布平移缩放状态
+  const transformRef = useRef<Transform>({ offsetX: 0, offsetY: 0, scale: 1 });
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
+
+  // 高亮选中节点 concept
+  const [highlightConcept, setHighlightConcept] = useState<string | null>(null);
 
   // 选中知识点时加载来源关联
   useEffect(() => {
@@ -65,11 +102,12 @@ export default function KnowledgePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Initialize simulation nodes when data changes
+  // 初始化力模拟节点
   useEffect(() => {
-    const w = 800;
-    const h = 600;
-    simNodesRef.current = nodes.map((n, i) => ({
+    const canvas = canvasRef.current;
+    const w = canvas?.width ?? 800;
+    const h = canvas?.height ?? 600;
+    simNodesRef.current = nodes.map((n) => ({
       ...n,
       x: w / 2 + (Math.random() - 0.5) * 300,
       y: h / 2 + (Math.random() - 0.5) * 300,
@@ -78,21 +116,22 @@ export default function KnowledgePage() {
     }));
   }, [nodes]);
 
-  // Simple force simulation
+  // 力模拟 tick — 被拖拽的节点跳过位置更新
   const tick = useCallback(() => {
     const simNodes = simNodesRef.current;
     if (simNodes.length === 0) return;
 
-    const w = 800;
-    const h = 600;
+    const canvas = canvasRef.current;
+    const w = canvas?.width ?? 800;
+    const h = canvas?.height ?? 600;
     const centerX = w / 2;
     const centerY = h / 2;
 
-    // Build concept -> index map
+    // concept -> index 映射
     const indexMap = new Map<string, number>();
     simNodes.forEach((n, i) => indexMap.set(n.concept, i));
 
-    // Repulsion between all nodes
+    // 斥力
     for (let i = 0; i < simNodes.length; i++) {
       for (let j = i + 1; j < simNodes.length; j++) {
         const dx = simNodes[j].x - simNodes[i].x;
@@ -108,7 +147,7 @@ export default function KnowledgePage() {
       }
     }
 
-    // Attraction along edges
+    // 引力（沿边）
     for (const edge of edges) {
       const si = indexMap.get(edge.from);
       const ti = indexMap.get(edge.to);
@@ -125,63 +164,195 @@ export default function KnowledgePage() {
       simNodes[ti].vy -= fy;
     }
 
-    // Center gravity
+    // 中心引力
     for (const n of simNodes) {
       n.vx += (centerX - n.x) * 0.001;
       n.vy += (centerY - n.y) * 0.001;
     }
 
-    // Apply velocity with damping
+    // 应用速度（拖拽中的节点使用固定位置）
     for (const n of simNodes) {
-      n.vx *= 0.9;
-      n.vy *= 0.9;
-      n.x += n.vx;
-      n.y += n.vy;
-      // Keep in bounds
-      n.x = Math.max(40, Math.min(w - 40, n.x));
-      n.y = Math.max(40, Math.min(h - 40, n.y));
+      if (n.fx !== undefined && n.fy !== undefined) {
+        // 被拖拽的节点：位置固定，速度清零
+        n.x = n.fx;
+        n.y = n.fy;
+        n.vx = 0;
+        n.vy = 0;
+      } else {
+        n.vx *= 0.9;
+        n.vy *= 0.9;
+        n.x += n.vx;
+        n.y += n.vy;
+        // 边界约束
+        n.x = Math.max(40, Math.min(w - 40, n.x));
+        n.y = Math.max(40, Math.min(h - 40, n.y));
+      }
     }
   }, [edges]);
 
-  // Animation loop
+  /** 屏幕坐标 → 世界坐标 */
+  const screenToWorld = useCallback((sx: number, sy: number) => {
+    const t = transformRef.current;
+    return {
+      x: (sx - t.offsetX) / t.scale,
+      y: (sy - t.offsetY) / t.scale,
+    };
+  }, []);
+
+  /** 在世界坐标下查找节点 */
+  const findNodeAt = useCallback((wx: number, wy: number): SimNode | null => {
+    const simNodes = simNodesRef.current;
+    // 从后往前查找（后渲染的在上面）
+    for (let i = simNodes.length - 1; i >= 0; i--) {
+      const n = simNodes[i];
+      const r = nodeRadius(n.concept, edges);
+      const dx = wx - n.x;
+      const dy = wy - n.y;
+      if (dx * dx + dy * dy <= r * r) return n;
+    }
+    return null;
+  }, [edges]);
+
+  /** 获取关联节点集合 */
+  const getRelatedConcepts = useCallback((concept: string): Set<string> => {
+    const related = new Set<string>();
+    for (const e of edges) {
+      if (e.from === concept) related.add(e.to);
+      if (e.to === concept) related.add(e.from);
+    }
+    return related;
+  }, [edges]);
+
+  // Canvas 渲染 + 动画循环
   useEffect(() => {
     if (nodes.length === 0) return;
 
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
     let running = true;
-    const svg = svgRef.current;
-    if (!svg) return;
+
+    // 响应式调整 canvas 尺寸
+    const resizeCanvas = () => {
+      const parent = canvas.parentElement;
+      if (parent) {
+        canvas.width = parent.clientWidth;
+        canvas.height = parent.clientHeight;
+      }
+    };
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
 
     const animate = () => {
       if (!running) return;
       tick();
 
+      const { width, height } = canvas;
+      const t = transformRef.current;
       const simNodes = simNodesRef.current;
-      const indexMap = new Map<string, number>();
-      simNodes.forEach((n, i) => indexMap.set(n.concept, i));
+      const hl = highlightConcept;
+      const relatedSet = hl ? getRelatedConcepts(hl) : null;
 
-      // Update SVG elements
-      const lines = svg.querySelectorAll<SVGLineElement>("line[data-edge]");
-      lines.forEach((line) => {
-        const from = line.getAttribute("data-from") ?? "";
-        const to = line.getAttribute("data-to") ?? "";
-        const si = indexMap.get(from);
-        const ti = indexMap.get(to);
-        if (si !== undefined && ti !== undefined) {
-          line.setAttribute("x1", String(simNodes[si].x));
-          line.setAttribute("y1", String(simNodes[si].y));
-          line.setAttribute("x2", String(simNodes[ti].x));
-          line.setAttribute("y2", String(simNodes[ti].y));
+      ctx.clearRect(0, 0, width, height);
+      ctx.save();
+      ctx.translate(t.offsetX, t.offsetY);
+      ctx.scale(t.scale, t.scale);
+
+      // 构建 concept -> SimNode 映射
+      const nodeMap = new Map<string, SimNode>();
+      simNodes.forEach((n) => nodeMap.set(n.concept, n));
+
+      // --- 绘制边 ---
+      for (const e of edges) {
+        const fromNode = nodeMap.get(e.from);
+        const toNode = nodeMap.get(e.to);
+        if (!fromNode || !toNode) continue;
+
+        const isHighlighted = hl && (e.from === hl || e.to === hl);
+        const isDimmed = hl && !isHighlighted;
+
+        ctx.beginPath();
+        ctx.moveTo(fromNode.x, fromNode.y);
+        ctx.lineTo(toNode.x, toNode.y);
+
+        if (isDimmed) {
+          ctx.strokeStyle = "rgba(180,175,165,0.08)";
+          ctx.lineWidth = 1 / t.scale;
+        } else if (isHighlighted) {
+          ctx.strokeStyle = "rgba(180,175,165,0.8)";
+          ctx.lineWidth = 2 / t.scale;
+        } else {
+          ctx.strokeStyle = "rgba(180,175,165,0.3)";
+          ctx.lineWidth = 1 / t.scale;
         }
-      });
+        ctx.stroke();
+      }
 
-      const groups = svg.querySelectorAll<SVGGElement>("g[data-node-idx]");
-      groups.forEach((g) => {
-        const idx = Number(g.getAttribute("data-node-idx"));
-        if (simNodes[idx]) {
-          g.setAttribute("transform", `translate(${simNodes[idx].x}, ${simNodes[idx].y})`);
+      // --- 绘制节点 ---
+      for (const n of simNodes) {
+        const r = nodeRadius(n.concept, edges);
+        const isSelected = hl === n.concept;
+        const isRelated = hl !== null && relatedSet !== null && relatedSet.has(n.concept);
+        const isDimmed = hl !== null && !isSelected && !isRelated;
+
+        ctx.save();
+
+        // 节点圆形
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+
+        const baseColor = confidenceColor(n.confidence);
+
+        if (isDimmed) {
+          ctx.globalAlpha = 0.15;
+          ctx.fillStyle = baseColor;
+          ctx.fill();
+        } else {
+          ctx.globalAlpha = isRelated ? 0.95 : 0.85;
+          ctx.fillStyle = baseColor;
+          ctx.fill();
         }
-      });
 
+        // 选中节点：白色描边 + 阴影
+        if (isSelected) {
+          ctx.globalAlpha = 1;
+          ctx.shadowColor = "rgba(0,0,0,0.3)";
+          ctx.shadowBlur = 12;
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 3 / t.scale;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        } else if (!isDimmed) {
+          ctx.globalAlpha = 0.6;
+          ctx.strokeStyle = "#EEECE2";
+          ctx.lineWidth = 1.5 / t.scale;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+
+        // --- 绘制文字 ---
+        if (!isDimmed || true) {
+          ctx.save();
+          ctx.globalAlpha = isDimmed ? 0.15 : 1;
+          ctx.fillStyle = "#ffffff";
+          ctx.font = `600 ${11 / t.scale}px -apple-system, "Noto Sans SC", sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+
+          const lines = wrapText(n.concept, 6);
+          const lineHeight = 13 / t.scale;
+          const startY = n.y - ((lines.length - 1) * lineHeight) / 2;
+          for (let li = 0; li < lines.length; li++) {
+            ctx.fillText(lines[li], n.x, startY + li * lineHeight);
+          }
+          ctx.restore();
+        }
+      }
+
+      ctx.restore();
       animRef.current = requestAnimationFrame(animate);
     };
 
@@ -189,8 +360,108 @@ export default function KnowledgePage() {
     return () => {
       running = false;
       cancelAnimationFrame(animRef.current);
+      window.removeEventListener("resize", resizeCanvas);
     };
-  }, [nodes, tick]);
+  }, [nodes, edges, tick, highlightConcept, getRelatedConcepts]);
+
+  // --- Canvas 交互事件 ---
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const { x: wx, y: wy } = screenToWorld(sx, sy);
+
+    const node = findNodeAt(wx, wy);
+    if (node) {
+      // 开始拖拽节点
+      dragNodeRef.current = node;
+      isDraggingRef.current = false;
+      node.fx = node.x;
+      node.fy = node.y;
+    } else {
+      // 开始画布平移
+      isPanningRef.current = true;
+      panStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        ox: transformRef.current.offsetX,
+        oy: transformRef.current.offsetY,
+      };
+    }
+  }, [screenToWorld, findNodeAt]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    if (dragNodeRef.current) {
+      isDraggingRef.current = true;
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const { x: wx, y: wy } = screenToWorld(sx, sy);
+      dragNodeRef.current.fx = wx;
+      dragNodeRef.current.fy = wy;
+    } else if (isPanningRef.current) {
+      const dx = e.clientX - panStartRef.current.x;
+      const dy = e.clientY - panStartRef.current.y;
+      transformRef.current.offsetX = panStartRef.current.ox + dx;
+      transformRef.current.offsetY = panStartRef.current.oy + dy;
+    }
+  }, [screenToWorld]);
+
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (dragNodeRef.current) {
+      if (!isDraggingRef.current) {
+        // 没有拖拽 → 当作点击事件
+        const concept = dragNodeRef.current.concept;
+        if (highlightConcept === concept) {
+          // 再次点击同一节点 → 取消高亮
+          setHighlightConcept(null);
+        } else {
+          setHighlightConcept(concept);
+          // 同时选中详情面板
+          const node = nodes.find((n) => n.concept === concept);
+          if (node) setSelected(node);
+        }
+      }
+      // 结束拖拽，解除固定
+      delete dragNodeRef.current.fx;
+      delete dragNodeRef.current.fy;
+      dragNodeRef.current = null;
+      isDraggingRef.current = false;
+    } else if (isPanningRef.current) {
+      isPanningRef.current = false;
+      // 如果几乎没移动 → 点击空白取消高亮
+      const dx = e.clientX - panStartRef.current.x;
+      const dy = e.clientY - panStartRef.current.y;
+      if (Math.abs(dx) < 3 && Math.abs(dy) < 3) {
+        setHighlightConcept(null);
+      }
+    }
+  }, [highlightConcept, nodes]);
+
+  // 滚轮缩放
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const t = transformRef.current;
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newScale = Math.max(0.2, Math.min(5, t.scale * zoomFactor));
+
+    // 以鼠标位置为中心缩放
+    t.offsetX = mx - (mx - t.offsetX) * (newScale / t.scale);
+    t.offsetY = my - (my - t.offsetY) * (newScale / t.scale);
+    t.scale = newScale;
+  }, []);
 
   return (
     <MainShell>
@@ -224,15 +495,15 @@ export default function KnowledgePage() {
           </p>
           <div className="mt-6 flex justify-center gap-6 text-xs text-stone-400">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full" style={{backgroundColor: "#6b8e6b"}} />
+              <span className="inline-block h-3 w-3 rounded-full" style={{backgroundColor: "#6b9e78"}} />
               已掌握
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full" style={{backgroundColor: "#c4a54a"}} />
+              <span className="inline-block h-3 w-3 rounded-full" style={{backgroundColor: "#c4a54d"}} />
               学习中
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full" style={{backgroundColor: "#c07060"}} />
+              <span className="inline-block h-3 w-3 rounded-full" style={{backgroundColor: "#c47a6c"}} />
               薄弱
             </span>
           </div>
@@ -241,76 +512,34 @@ export default function KnowledgePage() {
   ) : (
       <div className="relative flex h-full bg-[#EEECE2]">
       {/* 图谱区域 */}
-      <div className="flex-1">
+      <div className="flex-1 relative">
         <div className="absolute left-4 top-4 z-10">
           <h1 className="text-lg font-semibold text-stone-800">知识图谱</h1>
           <div className="mt-2 flex gap-4 text-xs text-stone-500">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{backgroundColor: "#6b8e6b"}} />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{backgroundColor: "#6b9e78"}} />
               已掌握
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{backgroundColor: "#c4a54a"}} />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{backgroundColor: "#c4a54d"}} />
               学习中
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{backgroundColor: "#c07060"}} />
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{backgroundColor: "#c47a6c"}} />
               薄弱
             </span>
           </div>
         </div>
 
-        <svg
-          ref={svgRef}
-          viewBox="0 0 800 600"
-          className="h-full w-full"
-          style={{ minHeight: "100%" }}
-        >
-          {/* Edges */}
-          {edges.map((e) => (
-            <line
-              key={e.id}
-              data-edge=""
-              data-from={e.from}
-              data-to={e.to}
-              x1={400}
-              y1={300}
-              x2={400}
-              y2={300}
-              stroke="#c8c4b8"
-              strokeWidth={1}
-              strokeOpacity={0.6}
-            />
-          ))}
-          {/* Nodes */}
-          {nodes.map((n, i) => (
-            <g
-              key={n.id}
-              data-node-idx={i}
-              transform="translate(400, 300)"
-              style={{ cursor: "pointer" }}
-              onClick={() => setSelected(n)}
-            >
-              <circle
-                r={Math.min(50, Math.max(28, 10 + n.concept.length * 5))}
-                fill={confidenceColor(n.confidence)}
-                fillOpacity={0.85}
-                stroke={selected?.id === n.id ? "#57534e" : "#EEECE2"}
-                strokeWidth={selected?.id === n.id ? 2.5 : 1.5}
-              />
-              <text
-                textAnchor="middle"
-                dy="0.35em"
-                fontSize={n.concept.length > 4 ? 10 : 12}
-                fill="white"
-                fontWeight={600}
-                style={{ pointerEvents: "none", userSelect: "none" }}
-              >
-                {n.concept.length > 5 ? n.concept.slice(0, 4) + "…" : n.concept}
-              </text>
-            </g>
-          ))}
-        </svg>
+        <canvas
+          ref={canvasRef}
+          className="h-full w-full cursor-grab active:cursor-grabbing"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onWheel={handleWheel}
+        />
       </div>
 
       {/* Detail panel — 统一卡片风格 */}
