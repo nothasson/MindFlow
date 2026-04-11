@@ -224,11 +224,17 @@ func main() {
 	})
 
 	// 资料上传路由
+	protected.GET("/api/resources", func(ctx context.Context, c *app.RequestContext) {
+		resourceHandler.List(ctx, c)
+	})
 	protected.POST("/api/resources/upload", func(ctx context.Context, c *app.RequestContext) {
 		resourceHandler.Upload(ctx, c)
 	})
 	protected.POST("/api/resources/import-url", func(ctx context.Context, c *app.RequestContext) {
 		resourceHandler.ImportURL(ctx, c)
+	})
+	protected.DELETE("/api/resources/:id", func(ctx context.Context, c *app.RequestContext) {
+		resourceHandler.Delete(ctx, c)
 	})
 
 	// 知识图谱路由

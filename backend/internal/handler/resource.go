@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
@@ -35,6 +36,8 @@ type resourceStore interface {
 	Create(ctx context.Context, resource *mdl.Resource, userID ...*uuid.UUID) (*mdl.Resource, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string, chunkCount int) error
 	UpdateOverview(ctx context.Context, id uuid.UUID, summary string, questions []string) error
+	List(ctx context.Context, userID ...*uuid.UUID) ([]mdl.Resource, error)
+	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 }
 
 // knowledgeWriter 抽象知识点写入能力，便于测试。
@@ -50,6 +53,19 @@ type sourceLinkWriter interface {
 // URLImportRequest URL 导入请求。
 type URLImportRequest struct {
 	URL string `json:"url"`
+}
+
+type resourceListItem struct {
+	ID              string   `json:"id"`
+	Filename        string   `json:"filename"`
+	SourceType      string   `json:"source_type"`
+	SourceURL       string   `json:"source_url,omitempty"`
+	Status          string   `json:"status"`
+	Pages           int      `json:"pages"`
+	Chunks          int      `json:"chunks"`
+	KnowledgePoints []string `json:"knowledge_points"`
+	Summary         string   `json:"summary,omitempty"`
+	CreatedAt       string   `json:"created_at"`
 }
 
 // ResourceHandler 资料上传处理器。
@@ -162,6 +178,77 @@ func (h *ResourceHandler) ImportURL(ctx context.Context, c *app.RequestContext) 
 		ContentText:      parseResult.Text,
 		Pages:            1,
 	}, userID)
+}
+
+// List GET /api/resources
+// 返回用户可见的资料列表。
+func (h *ResourceHandler) List(ctx context.Context, c *app.RequestContext) {
+	if h.resourceStore == nil {
+		c.JSON(http.StatusServiceUnavailable, utils.H{"error": "资料存储不可用"})
+		return
+	}
+
+	userID := getUserIDFromCtx(c)
+	resources, err := h.resourceStore.List(ctx, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取资料列表失败: " + err.Error()})
+		return
+	}
+
+	items := make([]resourceListItem, 0, len(resources))
+	for _, res := range resources {
+		filename := strings.TrimSpace(res.OriginalFilename)
+		if filename == "" {
+			filename = strings.TrimSpace(res.Title)
+		}
+		if filename == "" {
+			filename = "未命名资料"
+		}
+
+		items = append(items, resourceListItem{
+			ID:              res.ID.String(),
+			Filename:        filename,
+			SourceType:      res.SourceType,
+			SourceURL:       res.SourceURL,
+			Status:          res.Status,
+			Pages:           res.Pages,
+			Chunks:          res.ChunkCount,
+			KnowledgePoints: []string{},
+			Summary:         res.Summary,
+			CreatedAt:       res.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	c.JSON(http.StatusOK, utils.H{"resources": items})
+}
+
+// Delete DELETE /api/resources/:id
+// 删除用户自己的资料。
+func (h *ResourceHandler) Delete(ctx context.Context, c *app.RequestContext) {
+	if h.resourceStore == nil {
+		c.JSON(http.StatusServiceUnavailable, utils.H{"error": "资料存储不可用"})
+		return
+	}
+
+	userID := getUserIDFromCtx(c)
+	if userID == nil || *userID == uuid.Nil {
+		c.JSON(http.StatusUnauthorized, utils.H{"error": "需要登录才能删除资料"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, utils.H{"error": "资料 ID 格式错误"})
+		return
+	}
+
+	if err := h.resourceStore.Delete(ctx, id, *userID); err != nil {
+		c.JSON(http.StatusInternalServerError, utils.H{"error": "删除资料失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, utils.H{"success": true})
 }
 
 type ingestInput struct {

@@ -34,8 +34,10 @@ MindFlow 是一个 AI 苏格拉底式学习系统。学生上传学习资料，A
 - 后端改了 → 前端对应的 API 调用、类型、UI 是否同步
 - 前端改了 → 后端对应的接口、数据结构是否匹配
 - 数据库表改了 → model / repository / handler / 前端类型 全部同步
+- 前端(Web)改了 → 客户端(mobile)对应的页面、组件、API 调用、类型必须同步对齐
+- 客户端(mobile)改了 → 前端(Web)对应的页面、组件、API 调用、类型必须同步对齐
 
-**禁止只改一半就提交。**
+**禁止只改一半就提交。前端(Web)和客户端(mobile)必须保持同步对齐。**
 
 ### 3. 不展示虚假数据
 
@@ -51,6 +53,8 @@ MindFlow 是一个 AI 苏格拉底式学习系统。学生上传学习资料，A
 3. **严重** 问题必须修复后再次 `/review`
 4. **警告** 问题视情况修复或记录
 5. Review 通过后再 `git commit && git push`
+
+`/review` 时必须重点检查：只要涉及前端(Web)或客户端(mobile)修改，两边对应的页面、组件、API 调用、类型是否已经同步对齐。
 
 ### 5. 中文 commit + push
 
@@ -68,6 +72,36 @@ MindFlow 是一个 AI 苏格拉底式学习系统。学生上传学习资料，A
 ### 7. 依赖变化需重建镜像
 
 源码改动 HMR 自动生效。`package.json` / `requirements.txt` / `go.mod` 变化时需 `docker compose up -d --build <服务名>`。
+
+### 8. 部署时充分利用 Docker 缓存
+
+部署到 Lighthouse 时，**Docker 构建必须利用缓存**，不要使用 `--no-cache`：
+- **可复用缓存层**：基础镜像（FROM）、依赖安装（npm install / go mod download / pip install / apt-get）、系统包安装
+- **必须重新构建的层**：代码复制（COPY .）及之后的构建/编译步骤
+- **原因**：代码更新了需要重新编译，但依赖没变不需要重新下载
+
+正确做法：`docker compose build` （不加 --no-cache），让 Docker 自动匹配未变化的缓存层。
+
+### 9. 部署目录名必须固定 + 排除 override 文件 + 禁止时间戳
+
+部署到 Lighthouse 时：
+1. **服务器上部署包目录名必须固定**为 `/root/mindflow-deploy`，**绝对不允许带时间戳**。因为 docker-compose 用目录名作为 project name → 镜像名也包含它。每次名字不同 = 镜像名不同 = **Docker 缓存全部失效**（包括 fonts-noto-cjk、pip install 等耗时层）。
+2. **`deploy_project_preparation` 工具会自动在目录名后追加时间戳**（如 `mindflow-deploy_20260411232400`）。上传后**必须手动把文件移到固定目录** `/root/mindflow-deploy`，然后删除带时间戳的临时目录。
+3. **必须排除 `docker-compose.override.yml`**，该文件是开发用的源码挂载配置，会覆盖生产镜像内容。
+4. 部署前应清理旧的带时间戳的镜像：`docker images | grep 'mindflow-deploy_[0-9]' | awk '{print $3}' | xargs -r docker rmi`
+
+```bash
+# 上传后的必要操作：移动到固定目录
+cp -r /root/mindflow-deploy_XXXXXX/* /root/mindflow-deploy/
+rm -rf /root/mindflow-deploy_XXXXXX
+
+# 正确的部署启动命令（固定目录名 + 不加载 override）
+cd /root/mindflow-deploy && docker compose -f docker-compose.yml up -d
+
+# 错误做法 ❌
+# cd /root/mindflow-deploy_20260411232400 && docker compose up -d   # 时间戳导致缓存失效
+# docker compose -f docker-compose.yml -f docker-compose.override.yml up -d  # override 会覆盖镜像
+```
 
 ## 常用命令
 

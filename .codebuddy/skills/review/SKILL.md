@@ -30,6 +30,7 @@ MindFlow 是三服务架构：
    - 数据模型变更：Go model → PostgreSQL schema → Python schemas → 前端 types.ts
    - API 接口变更：Go handler → Python router → 前端 api.ts
    - 配置变更：.env.example → docker-compose.yml → 各服务读取环境变量的代码
+   - 前端(Web)或客户端(mobile)变更：另一端对应的页面、组件、API 调用、类型是否同步对齐
 4. **前端不展示虚假数据** — 禁止硬编码假会话、假用户名、假统计数据。无数据时展示空态
 5. **记忆连续性** — 记忆系统必须维持跨 session 的状态，不能有数据丢失风险
 6. **AI Native，不是 Workflow** — 严禁用 `if/switch + 关键词匹配` 做 Agent 路由或语义决策。所有需要理解语义的判断（路由分发、意图识别、内容分类等）必须交给 LLM 决策。关键词匹配只能用于纯机械性操作（如命令解析），不能替代语义理解。发现 `containsKeyword` 或类似模式用于语义判断的地方，标记为 [严重]
@@ -50,6 +51,7 @@ MindFlow 是三服务架构：
 2. **安全漏洞** — 注入、XSS、硬编码密钥、路径遍历、未校验的用户输入
 3. **错误处理** — 系统边界处是否有 error handling，是否有被忽略的 error
 4. **全链路一致性** — 是否只改了一处而遗漏了关联文件（见上方规范第 3 条）
+   - 尤其是前端(Web)和客户端(mobile)：页面、组件、API 调用、类型是否两边一起改了
 5. **缺少测试** — 新增的核心逻辑是否有对应的 _test.go / .test.ts / test_*.py
 6. **性能** — 不必要的分配、N+1 查询、缺少超时/限制
 

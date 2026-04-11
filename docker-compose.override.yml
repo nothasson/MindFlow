@@ -5,10 +5,14 @@
 
 services:
   backend:
+    build:
+      context: ./backend
+      target: dev
     volumes:
       - ./backend:/app
       - mindflow-memory:/data/memory
       - mindflow-uploads:/data/uploads
+      - ~/.codex:/root/.codex:ro
 
   ai-service:
     volumes:
@@ -16,6 +20,9 @@ services:
       - mindflow-uploads:/data/uploads
 
   frontend:
+    build:
+      context: ./frontend
+      target: dev
     volumes:
       - ./frontend:/app
       - /app/node_modules

@@ -29,3 +29,10 @@ Thumbs.db
 # Git worktrees
 .worktrees/
 worktrees/
+
+# Build artifacts
+backend/server
+backend/tmp/
+
+# CodeBuddy and integration files
+.codebuddy/

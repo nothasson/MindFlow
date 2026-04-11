@@ -7,10 +7,24 @@ interface MarkdownRendererProps {
   content: string;
 }
 
+function normalizeMarkdown(content: string): string {
+  return content.replace(
+    /```mermaid\s*([\s\S]*?)```/g,
+    (_match, diagram) =>
+      [
+        "> 当前安卓端暂不支持 Mermaid 图形直出，下面展示图表源码。",
+        "",
+        "```text",
+        String(diagram).trim(),
+        "```",
+      ].join("\n"),
+  );
+}
+
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <Markdown style={markdownStyles}>
-      {content}
+      {normalizeMarkdown(content)}
     </Markdown>
   );
 }

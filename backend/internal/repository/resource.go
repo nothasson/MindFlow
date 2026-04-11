@@ -141,6 +141,16 @@ func (r *ResourceRepo) List(ctx context.Context, userID ...*uuid.UUID) ([]model.
 	return resources, nil
 }
 
+// Delete 删除资料
+// userID 必填，用于防止跨用户删除
+func (r *ResourceRepo) Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM resources
+		WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)
+	`, id, userID)
+	return err
+}
+
 // Count 获取资料总数
 // userID 可为 nil，表示不按用户过滤
 func (r *ResourceRepo) Count(ctx context.Context, userID ...*uuid.UUID) (int, error) {

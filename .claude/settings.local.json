@@ -25,7 +25,30 @@
       "Read(//Users/hasson/.claude-internal/projects/-Users-hasson-Codes-MindFlow/e6fb4939-8df9-48e5-bf31-de0820408989/subagents/**)",
       "Bash(python3 -m json.tool)",
       "Bash(python3 -c :*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git checkout:*)",
+      "Bash(go get:*)",
+      "Bash(npx vitest:*)",
+      "Bash(wc:*)",
+      "Bash(npx create-expo-app@latest mobile --template blank-typescript)",
+      "Bash(npx expo:*)",
+      "Bash(mkdir:*)",
+      "Bash(python3 -c \" import sys, json for line in sys.stdin: line = line.strip\\(\\) if not line: continue try: d = json.loads\\(line\\) msg = d.get\\('message', {}\\) for c in msg.get\\('content', []\\): if c.get\\('type'\\) == 'text': print\\(c['text'][:500]\\) elif c.get\\('type'\\) == 'tool_use': print\\(f'[Tool: {c[\\\\\"name\\\\\"]}]'\\) except: pass \")",
+      "Bash(cat ./migrations/*.sql)",
+      "Bash(npx next:*)",
+      "Bash(npm list:*)",
+      "Bash(npx eas:*)",
+      "Bash(npm install:*)",
+      "Bash(~/Library/Android/sdk/cmdline-tools/latest/bin/sdkmanager --install \"ndk;27.1.12297006\")",
+      "Bash(git status:*)",
+      "Bash(~/Library/Android/sdk/emulator/emulator:*)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb devices:*)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb emu:*)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb install:*)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb shell:*)",
+      "Bash(kill 50012)",
+      "Bash(python3)",
+      "Bash(mv:*)"
     ]
   }
 }
