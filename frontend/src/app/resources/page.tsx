@@ -12,6 +12,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 export default function ResourcesPage() {
   const [uploading, setUploading] = useState(false);
   const [urlValue, setUrlValue] = useState("");
+  const [pasteText, setPasteText] = useState("");
   const [result, setResult] = useState<ResourceUploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -58,6 +59,31 @@ export default function ResourcesPage() {
     }
   }, [applyResult, urlValue]);
 
+  const handlePasteSubmit = useCallback(async () => {
+    const trimmed = pasteText.trim();
+    if (!trimmed) {
+      setError("请输入文本内容");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      // 将粘贴的纯文本包装为 .txt 文件后上传
+      const blob = new Blob([trimmed], { type: "text/plain" });
+      const file = new File([blob], "pasted-text.txt", { type: "text/plain" });
+      const data = await uploadResource(file);
+      applyResult(data);
+      setPasteText("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "提交失败");
+    } finally {
+      setUploading(false);
+    }
+  }, [applyResult, pasteText]);
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -96,13 +122,13 @@ export default function ResourcesPage() {
               选择文件
               <input
                 type="file"
-                accept=".pdf,.txt,.md"
+                accept=".pdf,.txt,.md,.docx,.pptx"
                 onChange={handleFileInput}
                 className="hidden"
                 disabled={uploading}
               />
             </label>
-            <p className="mt-3 text-xs text-stone-400">支持 PDF、TXT、Markdown</p>
+            <p className="mt-3 text-xs text-stone-400">支持 PDF、Word、PPT、TXT、Markdown</p>
           </div>
 
           <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
@@ -125,6 +151,26 @@ export default function ResourcesPage() {
                 导入链接
               </button>
             </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
+            <h2 className="text-sm font-medium text-stone-700">粘贴文本内容</h2>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder="直接粘贴学习资料的文本内容..."
+              rows={5}
+              className="mt-3 w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm text-stone-700 outline-none ring-0 placeholder:text-stone-400 focus:border-stone-400"
+              disabled={uploading}
+            />
+            <button
+              type="button"
+              onClick={handlePasteSubmit}
+              disabled={uploading || !pasteText.trim()}
+              className="mt-3 rounded-lg bg-stone-800 px-4 py-2 text-sm text-white transition hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              提交文本
+            </button>
           </div>
 
           {error ? (

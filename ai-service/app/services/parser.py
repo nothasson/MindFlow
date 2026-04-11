@@ -1,8 +1,11 @@
+import io
 import re
 from html.parser import HTMLParser
 from urllib import request
 
 import fitz  # PyMuPDF
+from docx import Document as DocxDocument
+from pptx import Presentation
 
 
 class HTMLContentExtractor(HTMLParser):
@@ -54,6 +57,40 @@ def parse_pdf(file_bytes: bytes, filename: str) -> dict:
     return {
         "text": full_text,
         "pages": len(pages),
+        "filename": filename,
+    }
+
+
+def parse_docx(file_bytes: bytes, filename: str) -> dict:
+    """解析 Word (.docx) 文档，提取段落文本"""
+    doc = DocxDocument(io.BytesIO(file_bytes))
+    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+    full_text = "\n\n".join(paragraphs)
+    return {
+        "text": full_text,
+        "pages": max(len(paragraphs), 1),
+        "filename": filename,
+    }
+
+
+def parse_pptx(file_bytes: bytes, filename: str) -> dict:
+    """解析 PPT (.pptx) 文件，提取每页幻灯片的文本"""
+    prs = Presentation(io.BytesIO(file_bytes))
+    slides_text: list[str] = []
+    for slide in prs.slides:
+        texts: list[str] = []
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                for paragraph in shape.text_frame.paragraphs:
+                    text = paragraph.text.strip()
+                    if text:
+                        texts.append(text)
+        if texts:
+            slides_text.append("\n".join(texts))
+    full_text = "\n\n".join(slides_text)
+    return {
+        "text": full_text,
+        "pages": len(prs.slides),
         "filename": filename,
     }
 

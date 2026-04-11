@@ -3,12 +3,21 @@ package handler
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 
 	"github.com/nothasson/MindFlow/backend/internal/repository"
+)
+
+// 仪表盘统计缓存（5 分钟有效期，避免每次刷新都查数据库）
+var (
+	dashboardStatsCache     utils.H
+	dashboardStatsCacheTime time.Time
+	dashboardStatsCacheMu   sync.Mutex
+	dashboardStatsCacheTTL  = 5 * time.Minute
 )
 
 // DashboardHandler 仪表盘 API 处理器
@@ -33,6 +42,16 @@ func NewDashboardHandler(convRepo *repository.ConversationRepo, msgRepo *reposit
 
 // Stats GET /api/dashboard/stats
 func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
+	// 检查缓存：5 分钟内直接返回缓存结果
+	dashboardStatsCacheMu.Lock()
+	if dashboardStatsCache != nil && time.Since(dashboardStatsCacheTime) < dashboardStatsCacheTTL {
+		cached := dashboardStatsCache
+		dashboardStatsCacheMu.Unlock()
+		c.JSON(http.StatusOK, cached)
+		return
+	}
+	dashboardStatsCacheMu.Unlock()
+
 	// 会话数
 	// 会话数（单条 SQL）
 	totalConversations, err := h.convRepo.Count(ctx)
@@ -95,7 +114,7 @@ func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
 		trend = append(trend, DayCount{Date: day, Count: trendMap[day]})
 	}
 
-	c.JSON(http.StatusOK, utils.H{
+	result := utils.H{
 		"total_conversations": totalConversations,
 		"total_messages":      totalMessages,
 		"total_resources":     totalResources,
@@ -104,7 +123,15 @@ func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
 		"streak":              streak,
 		"weak_points":         weakPoints,
 		"trend":               trend,
-	})
+	}
+
+	// 写入缓存
+	dashboardStatsCacheMu.Lock()
+	dashboardStatsCache = result
+	dashboardStatsCacheTime = time.Now()
+	dashboardStatsCacheMu.Unlock()
+
+	c.JSON(http.StatusOK, result)
 }
 
 // Heatmap GET /api/dashboard/heatmap

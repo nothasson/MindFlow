@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -14,6 +15,14 @@ import (
 
 	"github.com/nothasson/MindFlow/backend/internal/agent"
 	"github.com/nothasson/MindFlow/backend/internal/repository"
+)
+
+// 晨间简报缓存（30 分钟有效期，避免每次打开首页都调 LLM）
+var (
+	briefingCache     *BriefingResponse
+	briefingCacheTime time.Time
+	briefingCacheMu   sync.Mutex
+	briefingCacheTTL  = 30 * time.Minute
 )
 
 // BriefingHandler 晨间简报 API 处理器
@@ -56,6 +65,16 @@ type BriefingResponse struct {
 
 // GetBriefing GET /api/daily-briefing — 生成今日学习简报
 func (h *BriefingHandler) GetBriefing(ctx context.Context, c *app.RequestContext) {
+	// 检查缓存：30 分钟内直接返回缓存结果
+	briefingCacheMu.Lock()
+	if briefingCache != nil && time.Since(briefingCacheTime) < briefingCacheTTL {
+		cached := briefingCache
+		briefingCacheMu.Unlock()
+		c.JSON(http.StatusOK, utils.H{"briefing": cached})
+		return
+	}
+	briefingCacheMu.Unlock()
+
 	genCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 
@@ -189,6 +208,12 @@ func (h *BriefingHandler) GetBriefing(ctx context.Context, c *app.RequestContext
 	if briefing.NewItems == nil {
 		briefing.NewItems = []BriefingItem{}
 	}
+
+	// 写入缓存
+	briefingCacheMu.Lock()
+	briefingCache = &briefing
+	briefingCacheTime = time.Now()
+	briefingCacheMu.Unlock()
 
 	c.JSON(http.StatusOK, utils.H{"briefing": briefing})
 }
