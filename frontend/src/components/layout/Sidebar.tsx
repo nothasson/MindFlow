@@ -1,4 +1,5 @@
 import type { Conversation } from "@/lib/types";
+import type { User } from "@/hooks/useAuth";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,6 +10,8 @@ interface SidebarProps {
   onDeleteConversation?: (id: string) => void;
   onNewChat?: () => void;
   onCollapse?: () => void;
+  user?: User | null;
+  onLogout?: () => void;
 }
 
 const navLinks = [
@@ -26,6 +29,8 @@ export function Sidebar({
   onDeleteConversation,
   onNewChat,
   onCollapse,
+  user,
+  onLogout,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -134,6 +139,46 @@ export function Sidebar({
             );
           })}
         </div>
+      </div>
+
+      {/* 用户区域 */}
+      <div className="border-t border-stone-300/40 px-2 pt-3">
+        {user ? (
+          <div className="flex items-center gap-2.5 px-1">
+            {/* 首字母头像 */}
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stone-700 text-xs font-medium text-white">
+              {(user.display_name || user.email).charAt(0).toUpperCase()}
+            </div>
+            <span className="min-w-0 flex-1 truncate text-sm text-stone-700">
+              {user.display_name || user.email}
+            </span>
+            <button
+              type="button"
+              onClick={onLogout}
+              title="退出登录"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition hover:bg-stone-200/60 hover:text-stone-600"
+            >
+              {/* 退出图标 */}
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <Link
+            href="/login"
+            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-stone-500 transition hover:bg-stone-200/50 hover:text-stone-700"
+          >
+            {/* 用户图标 */}
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            登录 / 注册
+          </Link>
+        )}
       </div>
     </div>
   );

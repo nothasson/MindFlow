@@ -125,7 +125,7 @@ export default function Home() {
   return (
     <AppShell
       onNewChat={handleNewChat}
-      sidebar={(onCollapse) => (
+      sidebar={(onCollapse, user, onLogout) => (
         <Sidebar
           conversations={conversations}
           currentConversationId={conversationId}
@@ -133,6 +133,8 @@ export default function Home() {
           onDeleteConversation={handleDeleteConversation}
           onNewChat={handleNewChat}
           onCollapse={onCollapse}
+          user={user}
+          onLogout={onLogout}
         />
       )}
     >

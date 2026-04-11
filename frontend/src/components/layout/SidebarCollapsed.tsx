@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { User } from "@/hooks/useAuth";
 
 interface SidebarCollapsedProps {
   onExpand: () => void;
   onNewChat?: () => void;
+  user?: User | null;
+  onLogout?: () => void;
 }
 
 const tools = [
@@ -14,7 +17,7 @@ const tools = [
   { href: "/settings", label: "设置", d: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
 ];
 
-export function SidebarCollapsed({ onExpand, onNewChat }: SidebarCollapsedProps) {
+export function SidebarCollapsed({ onExpand, onNewChat, user, onLogout }: SidebarCollapsedProps) {
   const pathname = usePathname();
 
   return (
@@ -82,6 +85,42 @@ export function SidebarCollapsed({ onExpand, onNewChat }: SidebarCollapsedProps)
             </div>
           );
         })}
+
+        {/* 用户区域 */}
+        <div className="mt-2 border-t border-stone-300/40 pt-2">
+          {user ? (
+            <div className="group relative">
+              <button
+                type="button"
+                onClick={onLogout}
+                title={`${user.display_name || user.email} — 退出登录`}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-700 text-xs font-medium text-white transition hover:bg-stone-600"
+              >
+                {(user.display_name || user.email).charAt(0).toUpperCase()}
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-stone-800 px-2 py-1 text-xs text-white opacity-0 shadow transition group-hover:opacity-100">
+                {user.display_name || user.email}
+              </span>
+            </div>
+          ) : (
+            <div className="group relative">
+              <Link
+                href="/login"
+                aria-label="登录 / 注册"
+                title="登录 / 注册"
+                className="flex h-10 w-10 items-center justify-center rounded-lg text-stone-500 transition hover:bg-stone-300/40 hover:text-stone-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </Link>
+              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-stone-800 px-2 py-1 text-xs text-white opacity-0 shadow transition group-hover:opacity-100">
+                登录 / 注册
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

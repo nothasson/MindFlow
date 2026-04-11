@@ -1,17 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { login, register } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { isLoggedIn, loading: authLoading } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // 已登录用户访问 /login 自动跳转首页
+  useEffect(() => {
+    if (!authLoading && isLoggedIn) {
+      router.replace("/");
+    }
+  }, [authLoading, isLoggedIn, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +42,15 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // 加载中或已登录（等待跳转），显示空白避免闪烁
+  if (authLoading || isLoggedIn) {
+    return (
+      <div className="flex min-h-full items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-stone-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-full items-center justify-center px-4">
