@@ -6,12 +6,16 @@
   <p align="center">
     不给答案，只给引导。有记忆，会主动驱动你的学习节奏。
   </p>
+  <p align="center">
+    🌐 Web + 📱 Android / iOS 全平台支持
+  </p>
 </p>
 
 <p align="center">
   <a href="#快速开始">快速开始</a> ·
   <a href="#核心功能">核心功能</a> ·
   <a href="#系统架构">系统架构</a> ·
+  <a href="#移动端">移动端</a> ·
   <a href="#部署文档">部署文档</a> ·
   <a href="#开发文档">开发文档</a> ·
   <a href="#api-接口文档">API 文档</a>
@@ -77,6 +81,7 @@ MindFlow 是一个 **AI 私人导师**——上传学习资料，AI 自动解析
   - [学习仪表盘](#11-学习仪表盘)
 - [系统架构](#系统架构)
 - [技术栈](#技术栈)
+- [移动端](#移动端)
 - [快速开始](#快速开始)
 - [部署文档](#部署文档)
 - [开发文档](#开发文档)
@@ -563,6 +568,97 @@ sequenceDiagram
 | 算法 | Kahn 拓扑排序 | 学习路径生成 |
 | 算法 | Bloom 认知分类法 | 出题层级匹配 |
 | 部署 | Docker Compose | 6 服务编排 |
+| 移动端 | React Native 0.83 + Expo 55 | iOS & Android 原生应用 |
+| 移动端 | React Navigation（Drawer + Tab） | 抽屉侧栏 + 底部 Tab 双层导航 |
+| 移动端 | Zustand + AsyncStorage | 状态管理 + 本地持久化 |
+| 移动端 | react-native-svg | SVG 图标 + 知识图谱可视化 |
+
+---
+
+## 移动端
+
+MindFlow 提供功能完整的 Android & iOS 原生移动应用，与 Web 端共享同一套后端 API。
+
+### 移动端功能矩阵
+
+| 功能模块 | Web 端 | 移动端 | 说明 |
+|---------|--------|--------|------|
+| 苏格拉底对话 | ✅ | ✅ | SSE 流式消息，打字机效果 |
+| 学习数据仪表盘 | ✅ | ✅ | 热力图、薄弱点、趋势图 |
+| 学习资料管理 | ✅ | ✅ | 文件上传 / URL 导入 / 文本粘贴 |
+| 复习系统 | ✅ | ✅ | 月历视图 + FSRS 四评分 + 进度条 |
+| 知识测验 | ✅ | ✅ | 题目测验 / Anki 闪卡 / 对话评估三模式 |
+| 知识图谱 | ✅ | ✅ | 力导向 SVG 图谱 + 节点详情 + 来源追溯 |
+| 错题本 | ✅ | ✅ | 8 种错误类型过滤 + Markdown 渲染 |
+| 学习历程 | ✅ | ✅ | 日历热力图 + 概念进度 + 记忆搜索 |
+| 每日简报 | ✅ | ✅ | 折叠式组件，一键跳转学习 |
+| 设置 | ✅ | ✅ | 教学风格 / LLM 切换 / 考试计划 |
+| 登录/注册 | ✅ | ✅ | JWT 持久化，AsyncStorage 存储 |
+
+### 移动端导航架构
+
+```
+App
+├── LoginScreen                  ← 未登录时
+└── MainDrawer（侧边抽屉）        ← 已登录
+    ├── 主导航（底部 Tab）
+    │   ├── 聊天 (HomeScreen)        ← 苏格拉底对话
+    │   ├── 复习 (ReviewScreen)      ← 复习日历 + 待复习列表
+    │   ├── 测验 (QuizScreen)        ← 三模式测验
+    │   ├── 资料 (ResourcesScreen)   ← 资料上传管理
+    │   └── 我的 (SettingsScreen)    ← 设置 + 个人信息
+    ├── 学习数据 (DashboardScreen)   ← 仪表盘
+    ├── 知识图谱 (KnowledgeScreen)   ← SVG 力导向图
+    ├── 错题本 (WrongbookScreen)     ← 错题分析
+    └── 学习历程 (MemoryScreen)      ← 历程 + 搜索
+```
+
+全局 Stack 层还有 `ReviewSessionScreen`（复习会话），从 ReviewScreen "开始复习"按钮进入。
+
+### 移动端设计系统
+
+移动端与 Web 端完全一致的视觉语言：
+
+| 设计令牌 | 值 |
+|---------|---|
+| 背景色 | `#EEECE2`（暖米色） |
+| 品牌色 | `#C67A4A`（橙棕） |
+| 文字主色 | `#292524`（stone-800） |
+| 成功色 | `#22c55e` |
+| 警告色 | `#f59e0b` |
+| 错误色 | `#ef4444` |
+| 信息色 | `#3b82f6` |
+
+圆角：`16px`（卡片） / `8-12px`（按钮）｜字重：`700`（标题）/ `600`（副标题）/ `400`（正文）
+
+### 移动端快速开始
+
+```bash
+# 前置条件：Node.js 18+、Expo CLI、Android Studio 或 Xcode
+
+cd mobile
+npm install
+
+# 开发服务器
+npm start           # 启动 Metro，扫码用 Expo Go 预览
+
+# 原生构建
+npm run android     # 连接 Android 设备 / 模拟器
+npm run ios         # 需要 macOS + Xcode
+
+# 修改后端地址
+# 编辑 mobile/src/lib/config.ts
+# export const API_URL = "http://<你的服务器IP>:8080";
+```
+
+> **注意**：Android 模拟器连接本机后端请用 `http://10.0.2.2:8080`，iOS 模拟器直接用 `http://localhost:8080`，真机请用局域网 IP。
+
+### 移动端开发规则
+
+- 修改 Web 前端功能时，**必须同步更新移动端对应屏幕**，确保功能和 UI 一致
+- 修改 `mobile/src/lib/types.ts` 时，确保与 `frontend/src/lib/types.ts` 保持同步
+- 修改 `mobile/src/lib/api.ts` 时，确保 API 调用与后端接口一致
+- 移动端屏幕文件位于 `mobile/src/screens/`，组件位于 `mobile/src/components/`
 
 ---
 
@@ -1165,6 +1261,9 @@ erDiagram
 
 | 日期 | 类型 | 说明 |
 |------|------|------|
+| 2026-04-12 | feat | 移动端全面补全：ResourcesScreen / ReviewScreen + Session / QuizScreen（三模式）/ KnowledgeScreen（SVG 力导向图）/ WrongbookScreen / MemoryScreen / SettingsScreen / DailyBriefing 组件 |
+| 2026-04-12 | feat | 移动端导航架构升级：底部 Tab（聊天/复习/测验/资料/我的）+ 侧边抽屉（数据/图谱/错题/历程） |
+| 2026-04-12 | feat | 移动端基础设施完善：types.ts + api.ts 补全所有缺失接口（Review/Quiz/Wrongbook/Settings/ExamPlan/Memory） |
 | 2026-04-11 | feat | P2 完成：知识点向量化、资料全链路关联、教学风格自适应/可选、交错复习 |
 | 2026-04-11 | feat | P1 全部完成：Bloom 出题、晨间简报、仪表盘热力图、复习体验、考试模式、对话考察等 |
 | 2026-04-10 | feat | P0 全部完成：FSRS 迁移、苏格拉底升级、诊断精细化、注入防护、变式题、错题本 |

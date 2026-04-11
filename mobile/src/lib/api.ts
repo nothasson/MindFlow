@@ -1,17 +1,30 @@
 import type {
   AuthResponse,
+  CalendarDay,
   ChatRequest,
   ChatResponse,
   Conversation,
   DailyBriefing,
   DashboardStats,
+  ExamPlan,
   HeatmapDay,
   KnowledgeGraph,
   KnowledgeSourceLink,
+  LLMProviderSettings,
+  MemorySearchResult,
   Message,
+  QuizConversationResponse,
+  QuizQuestion,
+  QuizSubmitResult,
+  RecentConversation,
+  RecentKnowledge,
+  Resource,
   ResourceUploadResult,
+  ReviewItem,
   SSEEvent,
   User,
+  WrongBookEntry,
+  WrongBookStats,
 } from "./types";
 import { API_URL } from "./config";
 import { getTeachingStyle, getToken } from "./storage";
@@ -88,9 +101,6 @@ export async function sendMessage(messages: Message[]): Promise<Message> {
 
 /**
  * 流式发送消息（SSE）
- *
- * React Native 不原生支持 ReadableStream，
- * 这里用 XMLHttpRequest 手动解析 SSE 流。
  */
 export async function sendMessageStream(
   messages: Message[],
@@ -173,7 +183,6 @@ export async function sendMessageStream(
   xhr.timeout = 60000;
   xhr.send(JSON.stringify(body));
 
-  // 返回取消函数
   return () => xhr.abort();
 }
 
@@ -221,6 +230,19 @@ export async function getKnowledgeSources(
   return data.sources;
 }
 
+export async function deleteKnowledgeConcept(concept: string): Promise<void> {
+  const headers = await authHeaders();
+  await request(`/api/knowledge/concept/${encodeURIComponent(concept)}`, {
+    method: "DELETE",
+    headers,
+  });
+}
+
+export async function getRecentKnowledge(): Promise<RecentKnowledge> {
+  const headers = await authHeaders();
+  return request("/api/knowledge/recent", { headers });
+}
+
 // ===== 学习简报 API =====
 
 export async function getDailyBriefing(): Promise<DailyBriefing> {
@@ -236,11 +258,10 @@ export async function getDailyBriefing(): Promise<DailyBriefing> {
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   const headers = await authHeaders();
-  const data = await request<{ stats: DashboardStats }>(
+  return request<DashboardStats>(
     "/api/dashboard/stats",
     { headers }
   );
-  return data.stats;
 }
 
 export async function getDashboardHeatmap(): Promise<HeatmapDay[]> {
@@ -263,4 +284,224 @@ export async function importUrlResource(
     headers,
     body: JSON.stringify({ url }),
   });
+}
+
+export async function uploadResource(
+  file: { uri: string; name: string; type: string }
+): Promise<ResourceUploadResult> {
+  const token = await getToken();
+  const formData = new FormData();
+  formData.append("file", {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  } as unknown as Blob);
+
+  const response = await fetch(`${API_URL}/api/resources/upload`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error((body as { error?: string })?.error || "上传失败");
+  }
+  return response.json();
+}
+
+export async function getResources(): Promise<Resource[]> {
+  const headers = await authHeaders();
+  const data = await request<{ resources: Resource[] }>("/api/resources", {
+    headers,
+  });
+  return data.resources;
+}
+
+export async function deleteResource(id: string): Promise<void> {
+  const headers = await authHeaders();
+  await request(`/api/resources/${id}`, { method: "DELETE", headers });
+}
+
+// ===== 复习 API =====
+
+export async function getReviewDue(): Promise<ReviewItem[]> {
+  const headers = await authHeaders();
+  const data = await request<{ items: ReviewItem[] }>("/api/review/due", {
+    headers,
+  });
+  return data.items;
+}
+
+export async function getReviewUpcoming(): Promise<ReviewItem[]> {
+  const headers = await authHeaders();
+  const data = await request<{ items: ReviewItem[] }>(
+    "/api/review/upcoming",
+    { headers }
+  );
+  return data.items;
+}
+
+// ===== 测验 API =====
+
+export async function generateQuiz(
+  concept: string,
+  count?: number
+): Promise<QuizQuestion[]> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
+  const data = await request<{ questions: QuizQuestion[] }>(
+    "/api/quiz/generate",
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ concept, count: count ?? 3 }),
+    }
+  );
+  return data.questions;
+}
+
+export async function submitQuiz(
+  concept: string,
+  question: string,
+  answer: string
+): Promise<QuizSubmitResult> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
+  return request("/api/quiz/submit", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ concept, question, answer }),
+  });
+}
+
+export async function quizAnkiRate(
+  concept: string,
+  rating: number
+): Promise<void> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
+  await request("/api/quiz/anki-rate", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ concept, rating }),
+  });
+}
+
+export async function quizConversation(
+  concept: string,
+  message: string,
+  sessionId?: string
+): Promise<QuizConversationResponse> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
+  return request("/api/quiz/conversation", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ concept, message, session_id: sessionId }),
+  });
+}
+
+// ===== 错题本 API =====
+
+export async function getWrongBook(
+  errorType?: string
+): Promise<WrongBookEntry[]> {
+  const headers = await authHeaders();
+  const query = errorType ? `?error_type=${errorType}` : "";
+  const data = await request<{ entries: WrongBookEntry[] }>(
+    `/api/wrongbook${query}`,
+    { headers }
+  );
+  return data.entries;
+}
+
+export async function getWrongBookStats(): Promise<WrongBookStats> {
+  const headers = await authHeaders();
+  return request("/api/wrongbook/stats", { headers });
+}
+
+export async function markWrongBookReviewed(id: string): Promise<void> {
+  const headers = await authHeaders();
+  await request(`/api/wrongbook/${id}/review`, {
+    method: "POST",
+    headers,
+  });
+}
+
+export async function deleteWrongBookEntry(id: string): Promise<void> {
+  const headers = await authHeaders();
+  await request(`/api/wrongbook/${id}`, { method: "DELETE", headers });
+}
+
+// ===== 设置 API =====
+
+export async function getProviderSettings(): Promise<LLMProviderSettings> {
+  const headers = await authHeaders();
+  return request("/api/settings/provider", { headers });
+}
+
+export async function setProvider(name: string): Promise<void> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
+  await request("/api/settings/provider", {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ provider: name }),
+  });
+}
+
+export async function getExamPlans(): Promise<ExamPlan[]> {
+  const headers = await authHeaders();
+  const data = await request<{ plans: ExamPlan[] }>("/api/exam-plans", {
+    headers,
+  });
+  return data.plans;
+}
+
+export async function createExamPlan(plan: {
+  title: string;
+  exam_date: string;
+  concepts: string[];
+  acceleration_factor?: number;
+}): Promise<ExamPlan> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
+  return request("/api/exam-plans", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(plan),
+  });
+}
+
+export async function deleteExamPlan(id: string): Promise<void> {
+  const headers = await authHeaders();
+  await request(`/api/exam-plans/${id}`, { method: "DELETE", headers });
+}
+
+// ===== 记忆/学习历程 API =====
+
+export async function getRecentConversations(): Promise<RecentConversation[]> {
+  const headers = await authHeaders();
+  const data = await request<{ conversations: RecentConversation[] }>(
+    "/api/conversations/recent",
+    { headers }
+  );
+  return data.conversations;
+}
+
+export async function getStatsCalendar(): Promise<CalendarDay[]> {
+  const headers = await authHeaders();
+  const data = await request<{ days: CalendarDay[] }>(
+    "/api/stats/calendar",
+    { headers }
+  );
+  return data.days;
+}
+
+export async function searchMemory(
+  query: string
+): Promise<MemorySearchResult[]> {
+  const headers = await authHeaders();
+  const data = await request<{ results: MemorySearchResult[] }>(
+    `/api/memory/search?q=${encodeURIComponent(query)}`,
+    { headers }
+  );
+  return data.results;
 }

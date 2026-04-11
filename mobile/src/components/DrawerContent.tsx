@@ -8,19 +8,19 @@ import {
   Alert,
 } from "react-native";
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
-import { Svg, Path, Line, Polyline } from "react-native-svg";
+import { Svg, Path, Line, Polyline, Circle } from "react-native-svg";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import { colors } from "../theme/colors";
 
 const navItems = [
   {
-    key: "聊天",
-    label: "聊天",
+    key: "学习数据",
+    label: "学习数据",
     icon: (color: string) => (
       <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
         <Path
-          d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+          d="M3 3v18h18M9 17V9m4 8V5m4 12v-4"
           stroke={color}
           strokeWidth={1.8}
           strokeLinecap="round"
@@ -30,12 +30,50 @@ const navItems = [
     ),
   },
   {
-    key: "学习数据",
-    label: "学习数据",
+    key: "知识图谱",
+    label: "知识图谱",
+    icon: (color: string) => (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Circle cx="6" cy="6" r="3" stroke={color} strokeWidth={1.8} />
+        <Circle cx="18" cy="6" r="3" stroke={color} strokeWidth={1.8} />
+        <Circle cx="12" cy="18" r="3" stroke={color} strokeWidth={1.8} />
+        <Line x1="8.5" y1="7.5" x2="10.5" y2="16" stroke={color} strokeWidth={1.5} />
+        <Line x1="15.5" y1="7.5" x2="13.5" y2="16" stroke={color} strokeWidth={1.5} />
+        <Line x1="9" y1="6" x2="15" y2="6" stroke={color} strokeWidth={1.5} />
+      </Svg>
+    ),
+  },
+  {
+    key: "错题本",
+    label: "错题本",
     icon: (color: string) => (
       <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
         <Path
-          d="M3 3v18h18M9 17V9m4 8V5m4 12v-4"
+          d="M4 19.5A2.5 2.5 0 016.5 17H20"
+          stroke={color}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <Path
+          d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"
+          stroke={color}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <Line x1="9" y1="10" x2="15" y2="10" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      </Svg>
+    ),
+  },
+  {
+    key: "学习历程",
+    label: "学习历程",
+    icon: (color: string) => (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={1.8} />
+        <Polyline
+          points="12 6 12 12 16 14"
           stroke={color}
           strokeWidth={1.8}
           strokeLinecap="round"
@@ -69,31 +107,29 @@ export function DrawerContent(props: DrawerContentComponentProps) {
 
   return (
     <View style={styles.container}>
-      {/* 标题 */}
       <View style={styles.header}>
         <Text style={styles.title}>MindFlow</Text>
+        <Text style={styles.subtitle}>会话历史与学习工具</Text>
       </View>
 
-      {/* 新建对话 */}
       <TouchableOpacity
         style={[
-          styles.navItem,
-          !currentConversationId && currentRoute === "聊天" && styles.navItemActive,
+          styles.newChatButton,
+          !currentConversationId && currentRoute === "主导航" && styles.newChatButtonActive,
         ]}
         onPress={() => {
           newChat();
-          props.navigation.navigate("聊天");
+          props.navigation.navigate("主导航", { screen: "聊天", params: { reset: true } });
           props.navigation.closeDrawer();
         }}
       >
         <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-          <Line x1="12" y1="5" x2="12" y2="19" stroke={colors.stone600} strokeWidth={1.8} strokeLinecap="round" />
-          <Line x1="5" y1="12" x2="19" y2="12" stroke={colors.stone600} strokeWidth={1.8} strokeLinecap="round" />
+          <Line x1="12" y1="5" x2="12" y2="19" stroke={colors.white} strokeWidth={1.8} strokeLinecap="round" />
+          <Line x1="5" y1="12" x2="19" y2="12" stroke={colors.white} strokeWidth={1.8} strokeLinecap="round" />
         </Svg>
-        <Text style={styles.navText}>新建对话</Text>
+        <Text style={styles.newChatText}>新建对话</Text>
       </TouchableOpacity>
 
-      {/* 会话列表 */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>最近对话</Text>
       </View>
@@ -108,7 +144,10 @@ export function DrawerContent(props: DrawerContentComponentProps) {
               ]}
               onPress={() => {
                 selectConversation(conv.id);
-                props.navigation.navigate("聊天");
+                props.navigation.navigate("主导航", {
+                  screen: "聊天",
+                  params: { conversationId: conv.id },
+                });
                 props.navigation.closeDrawer();
               }}
               onLongPress={() => handleDelete(conv.id)}
@@ -129,26 +168,30 @@ export function DrawerContent(props: DrawerContentComponentProps) {
         )}
       </ScrollView>
 
-      {/* 导航项 */}
       <View style={styles.navSection}>
-        {navItems.map((item) => {
-          const active = currentRoute === item.key;
-          return (
-            <TouchableOpacity
-              key={item.key}
-              style={[styles.navItem, active && styles.navItemActive]}
-              onPress={() => {
-                props.navigation.navigate(item.key);
-                props.navigation.closeDrawer();
-              }}
-            >
-              {item.icon(active ? colors.stone800 : colors.stone600)}
-              <Text style={[styles.navText, active && styles.navTextActive]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>更多工具</Text>
+        </View>
+        <ScrollView style={styles.navScroll} showsVerticalScrollIndicator={false}>
+          {navItems.map((item) => {
+            const active = currentRoute === item.key;
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.navItem, active && styles.navItemActive]}
+                onPress={() => {
+                  props.navigation.navigate(item.key);
+                  props.navigation.closeDrawer();
+                }}
+              >
+                {item.icon(active ? colors.stone800 : colors.stone600)}
+                <Text style={[styles.navText, active && styles.navTextActive]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* 用户区域 */}
@@ -210,40 +253,72 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: 60,
-    paddingHorizontal: 12,
+    paddingTop: 52,
+    paddingHorizontal: 16,
   },
   header: {
-    paddingHorizontal: 8,
-    marginBottom: 16,
+    paddingHorizontal: 4,
+    marginBottom: 14,
   },
   title: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 26,
+    fontWeight: "800",
     color: colors.stone800,
   },
+  subtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: colors.stone500,
+  },
+  newChatButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.brand,
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
+    shadowColor: colors.brand,
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  newChatButtonActive: {
+    opacity: 0.92,
+  },
+  newChatText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.white,
+  },
   sectionHeader: {
-    paddingHorizontal: 12,
-    marginTop: 20,
+    paddingHorizontal: 4,
+    marginTop: 18,
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 11,
-    fontWeight: "500",
+    fontSize: 12,
+    fontWeight: "700",
     color: colors.stone400,
-    textTransform: "uppercase",
   },
   conversationList: {
-    flex: 1,
+    flexGrow: 0,
+    maxHeight: 210,
   },
   conversationItem: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginBottom: 2,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginBottom: 6,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(231, 229, 228, 0.8)",
   },
   conversationItemActive: {
-    backgroundColor: "rgba(231, 229, 228, 0.7)",
+    backgroundColor: "rgba(198, 122, 74, 0.12)",
+    borderColor: "rgba(198, 122, 74, 0.22)",
   },
   conversationText: {
     fontSize: 14,
@@ -254,27 +329,32 @@ const styles = StyleSheet.create({
     color: colors.stone800,
   },
   emptyText: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     fontSize: 13,
     color: colors.stone400,
   },
   navSection: {
-    borderTopWidth: 1,
-    borderTopColor: "rgba(214, 211, 209, 0.4)",
-    paddingTop: 12,
-    marginTop: 8,
-    gap: 2,
+    marginTop: 10,
+    flex: 1,
+  },
+  navScroll: {
+    flex: 1,
   },
   navItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginBottom: 6,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(231, 229, 228, 0.8)",
   },
   navItemActive: {
-    backgroundColor: "rgba(231, 229, 228, 0.7)",
+    backgroundColor: "rgba(198, 122, 74, 0.12)",
+    borderColor: "rgba(198, 122, 74, 0.22)",
   },
   navText: {
     fontSize: 14,
@@ -289,12 +369,12 @@ const styles = StyleSheet.create({
     borderTopColor: "rgba(214, 211, 209, 0.4)",
     paddingTop: 12,
     paddingBottom: 16,
-    marginTop: 8,
+    marginTop: 12,
   },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     gap: 10,
   },
   userAvatar: {

@@ -110,17 +110,173 @@ export interface AuthResponse {
 }
 
 /** Dashboard 统计 */
+export interface DashboardWeakPoint {
+  concept: string;
+  confidence: number;
+}
+
+export interface DashboardTrendDay {
+  date: string;
+  count: number;
+}
+
 export interface DashboardStats {
-  total_concepts: number;
-  mastered_concepts: number;
-  weak_concepts: number;
-  streak_days: number;
-  today_minutes: number;
   total_conversations: number;
-  total_quizzes: number;
+  total_messages: number;
+  total_resources: number;
+  total_courses: number;
+  total_days: number;
+  streak: number;
+  weak_points: DashboardWeakPoint[];
+  trend: DashboardTrendDay[];
 }
 
 export interface HeatmapDay {
   date: string;
   count: number;
+}
+
+// ===== 复习系统 =====
+
+export interface ReviewItem {
+  id?: string;
+  concept: string;
+  confidence: number;
+  interval_days: number;
+  next_review: string;
+  easiness_factor: number;
+  repetitions: number;
+}
+
+// ===== 测验系统 =====
+
+export interface QuizQuestion {
+  question: string;
+  concept: string;
+  difficulty?: string;
+}
+
+export interface QuizSubmitResult {
+  correct: boolean;
+  score: number;
+  explanation: string;
+  error_type?: string;
+}
+
+export interface QuizConversationResponse {
+  session_id: string;
+  message: string;
+  finished: boolean;
+  score?: number;
+  concepts_assessed?: string[];
+}
+
+// ===== 错题本 =====
+
+export type ErrorType =
+  | "knowledge_gap"
+  | "concept_confusion"
+  | "concept_error"
+  | "method_error"
+  | "calculation_error"
+  | "overconfidence"
+  | "strategy_error"
+  | "unclear_expression";
+
+export const ERROR_TYPE_LABELS: Record<ErrorType, string> = {
+  knowledge_gap: "知识盲区",
+  concept_confusion: "概念混淆",
+  concept_error: "概念错误",
+  method_error: "方法错误",
+  calculation_error: "计算错误",
+  overconfidence: "过度自信",
+  strategy_error: "策略错误",
+  unclear_expression: "表达不清",
+};
+
+export interface WrongBookEntry {
+  id: string;
+  quiz_attempt_id: string;
+  concept: string;
+  error_type: ErrorType;
+  question: string;
+  user_answer: string;
+  reviewed: boolean;
+  review_count: number;
+  next_review?: string;
+  created_at: string;
+}
+
+export interface WrongBookStats {
+  total: number;
+  unreviewed: number;
+  by_error_type: Record<string, number>;
+}
+
+// ===== 设置 =====
+
+export interface LLMProvider {
+  name: string;
+  model: string;
+  active: boolean;
+}
+
+export interface LLMProviderSettings {
+  active: string;
+  providers: LLMProvider[];
+}
+
+export interface ExamPlan {
+  id: string;
+  title: string;
+  exam_date: string;
+  concepts: string[];
+  acceleration_factor: number;
+  created_at: string;
+}
+
+// ===== 记忆/学习历程 =====
+
+export interface RecentConversation {
+  id: string;
+  title: string;
+  last_message?: string;
+  message_count: number;
+  updated_at: string;
+}
+
+export interface RecentKnowledge {
+  total: number;
+  new: number;
+  learning: number;
+  mastered: number;
+  recent: {
+    concept: string;
+    confidence: number;
+  }[];
+}
+
+export interface CalendarDay {
+  date: string;
+  count: number;
+}
+
+export interface MemorySearchResult {
+  source: string;
+  content: string;
+}
+
+// ===== 资源 =====
+
+export interface Resource {
+  id: string;
+  filename: string;
+  source_type: string;
+  source_url?: string;
+  status: string;
+  pages: number;
+  chunks: number;
+  knowledge_points: string[];
+  summary?: string;
+  created_at: string;
 }
