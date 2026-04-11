@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth, type User } from "@/hooks/useAuth";
 
 import { SidebarCollapsed } from "./SidebarCollapsed";
@@ -11,10 +12,28 @@ interface AppShellProps {
 
 export function AppShell({ sidebar, onNewChat, children }: AppShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // 路由守卫：未登录时跳转 /login（/login 页本身除外）
+  useEffect(() => {
+    if (!loading && !user && pathname !== "/login") {
+      router.replace("/login");
+    }
+  }, [loading, user, pathname, router]);
 
   const expandSidebar = () => setIsSidebarOpen(true);
   const collapseSidebar = () => setIsSidebarOpen(false);
+
+  // 加载中显示空白，避免闪烁
+  if (loading) {
+    return (
+      <main className="flex h-screen items-center justify-center bg-[#EEECE2]">
+        <p className="text-sm text-stone-400">加载中...</p>
+      </main>
+    );
+  }
 
   return (
     <main className="flex h-screen bg-[#EEECE2] text-stone-800">
