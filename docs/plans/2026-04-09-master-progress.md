@@ -143,7 +143,7 @@
 - [x] 多用户数据隔离（user_id 字段 + Repository 过滤）
 - [x] LLM 评估体系（异步质量评分 + 统计 API）
 - [x] 性能优化（晨间简报 30 分钟缓存 + 仪表盘 5 分钟缓存）
-- [ ] iOS 原生客户端（Swift/SwiftUI，复用后端 API）
+- [ ] Android 原生客户端（Kotlin/Jetpack Compose，复用后端 API）
 - [ ] E2E 测试（Playwright 端到端）
 - [ ] 配置一致性修复（LLM_MODEL 默认值统一、CORS 链路补齐）
 
