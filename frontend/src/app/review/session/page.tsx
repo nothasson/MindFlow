@@ -57,6 +57,10 @@ export default function ReviewSessionPage() {
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
 
+  // 逐题展示：拆分后的题目数组和当前题索引
+  const [quizQuestions, setQuizQuestions] = useState<string[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+
   // 统计
   const [correctCount, setCorrectCount] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -83,6 +87,13 @@ export default function ReviewSessionPage() {
       });
   }, []);
 
+  // 解析 LLM 返回的多题文本为单题数组
+  const parseQuestions = (text: string): string[] => {
+    const parts = text.split(/(?=###\s*题目|(?:^|\n)\*\*题目)/);
+    const filtered = parts.filter((p) => p.trim().length > 20);
+    return filtered.length > 0 ? filtered : [text];
+  };
+
   // 为当前概念生成题目
   const generateQuiz = useCallback(
     async (concept: string) => {
@@ -91,29 +102,40 @@ export default function ReviewSessionPage() {
       setAnswer("");
       setResult(null);
       setSelectedRating(null);
+      setQuizQuestions([]);
+      setCurrentQuestionIndex(0);
       try {
         const res = await fetch(`${API_URL}/api/quiz/generate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ concept }),
         });
+        if (!res.ok) throw new Error("出题失败");
         const data = await res.json();
         // API 返回 {concept, questions} — questions 是 Markdown 文本
         const questionText = typeof data.questions === "string" ? data.questions : `请解释「${concept}」的核心概念。`;
+        // 拆分成单题数组
+        const parsed = parseQuestions(questionText);
+        setQuizQuestions(parsed);
+        setCurrentQuestionIndex(0);
+        // quiz 设为第一题
         setQuiz({
           id: `quiz-${Date.now()}`,
           concept: data.concept ?? concept,
-          question: questionText,
+          question: parsed[0],
           answer: "",
           explanation: "",
         });
         setPhase("answering");
       } catch {
         // 生成失败时显示一个简单的自评题
+        const fallbackQuestions = [`请回忆并解释「${concept}」的核心内容。`];
+        setQuizQuestions(fallbackQuestions);
+        setCurrentQuestionIndex(0);
         setQuiz({
           id: "fallback",
           concept,
-          question: `请回忆并解释「${concept}」的核心内容。`,
+          question: fallbackQuestions[0],
           answer: "",
           explanation: "",
         });
@@ -142,10 +164,11 @@ export default function ReviewSessionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           concept: quiz.concept,
-          question: quiz.question.slice(0, 500),
+          question: quiz.question.slice(0, 500), // 只发送当前单题
           answer: answer.trim(),
         }),
       });
+      if (!res.ok) throw new Error("提交失败");
       const data = await res.json();
       // 后端返回 {is_correct, score, explanation, concept}
       const submitResult: SubmitResult = {
@@ -182,14 +205,28 @@ export default function ReviewSessionPage() {
     setPhase("rated");
   };
 
-  // 下一题
+  // 下一题：先检查同概念下是否还有下一个子题，再切换到下一个概念
   const handleNext = () => {
-    const nextIdx = currentIndex + 1;
-    if (nextIdx >= items.length) {
-      setPhase("done");
+    const nextQIdx = currentQuestionIndex + 1;
+    if (nextQIdx < quizQuestions.length) {
+      // 同概念下还有子题，切到下一题
+      setCurrentQuestionIndex(nextQIdx);
+      setQuiz((prev) =>
+        prev ? { ...prev, question: quizQuestions[nextQIdx] } : prev
+      );
+      setAnswer("");
+      setResult(null);
+      setSelectedRating(null);
+      setPhase("answering");
     } else {
-      setCurrentIndex(nextIdx);
-      setPhase("loading");
+      // 当前概念所有子题答完，切到下一个概念
+      const nextIdx = currentIndex + 1;
+      if (nextIdx >= items.length) {
+        setPhase("done");
+      } else {
+        setCurrentIndex(nextIdx);
+        setPhase("loading");
+      }
     }
   };
 
@@ -247,6 +284,11 @@ export default function ReviewSessionPage() {
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm text-stone-500">
                     复习进度 {currentIndex + 1}/{total}
+                    {quizQuestions.length > 1 && (
+                      <span className="ml-2 text-xs text-stone-400">
+                        （第 {currentQuestionIndex + 1}/{quizQuestions.length} 题）
+                      </span>
+                    )}
                   </span>
                   <div className="flex items-center gap-2">
                     {streak > 0 && (
@@ -421,7 +463,11 @@ export default function ReviewSessionPage() {
                           onClick={handleNext}
                           className="rounded-xl bg-[#C67A4A] px-6 py-2 text-sm text-white transition hover:bg-[#B06A3A]"
                         >
-                          {currentIndex + 1 >= total ? "查看总结" : "下一题 →"}
+                          {currentQuestionIndex + 1 < quizQuestions.length
+                            ? "下一题 →"
+                            : currentIndex + 1 >= total
+                              ? "查看总结"
+                              : "下一个概念 →"}
                         </button>
                       </div>
                     )}

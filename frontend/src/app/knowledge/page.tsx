@@ -240,7 +240,7 @@ export default function KnowledgePage() {
       </div>
   ) : (
       <div className="relative flex h-full bg-[#EEECE2]">
-      {/* Graph area */}
+      {/* 图谱区域 */}
       <div className="flex-1">
         <div className="absolute left-4 top-4 z-10">
           <h1 className="text-lg font-semibold text-stone-800">知识图谱</h1>
@@ -313,9 +313,9 @@ export default function KnowledgePage() {
         </svg>
       </div>
 
-      {/* Detail panel */}
+      {/* Detail panel — 统一卡片风格 */}
       {selected && (
-        <div className="w-72 shrink-0 border-l border-stone-200 bg-white p-5">
+        <div className="absolute right-4 top-4 bottom-4 z-10 w-72 shrink-0 overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-base font-semibold text-stone-800">{selected.concept}</h2>
             <button
