@@ -20,13 +20,19 @@ func NewCourseRepo(db *DB) *CourseRepo {
 }
 
 // Create 创建课程
-func (r *CourseRepo) Create(ctx context.Context, resourceID *uuid.UUID, title, summary, difficulty, style string) (*model.Course, error) {
+// userID 可为 nil，表示无登录状态
+func (r *CourseRepo) Create(ctx context.Context, resourceID *uuid.UUID, title, summary, difficulty, style string, userID ...*uuid.UUID) (*model.Course, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var course model.Course
 	err := r.pool.QueryRow(ctx,
-		`INSERT INTO courses (resource_id, title, summary, difficulty_level, style)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO courses (resource_id, title, summary, difficulty_level, style, user_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 RETURNING id, resource_id, title, summary, difficulty_level, style, section_count, created_at, updated_at`,
-		resourceID, title, summary, difficulty, style,
+		resourceID, title, summary, difficulty, style, uid,
 	).Scan(&course.ID, &course.ResourceID, &course.Title, &course.Summary,
 		&course.DifficultyLevel, &course.Style, &course.SectionCount,
 		&course.CreatedAt, &course.UpdatedAt)
@@ -36,28 +42,56 @@ func (r *CourseRepo) Create(ctx context.Context, resourceID *uuid.UUID, title, s
 	return &course, nil
 }
 
-// GetByID 获取课程
-func (r *CourseRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Course, error) {
+// GetByID 获取课程（userID 非 nil 时校验归属）
+func (r *CourseRepo) GetByID(ctx context.Context, id uuid.UUID, userID ...*uuid.UUID) (*model.Course, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var course model.Course
-	err := r.pool.QueryRow(ctx,
-		`SELECT id, resource_id, title, summary, difficulty_level, style, section_count, created_at, updated_at
-		 FROM courses WHERE id = $1`,
-		id,
-	).Scan(&course.ID, &course.ResourceID, &course.Title, &course.Summary,
-		&course.DifficultyLevel, &course.Style, &course.SectionCount,
-		&course.CreatedAt, &course.UpdatedAt)
+	var err error
+	if uid != nil {
+		err = r.pool.QueryRow(ctx,
+			`SELECT id, resource_id, title, summary, difficulty_level, style, section_count, created_at, updated_at
+			 FROM courses WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)`,
+			id, *uid,
+		).Scan(&course.ID, &course.ResourceID, &course.Title, &course.Summary,
+			&course.DifficultyLevel, &course.Style, &course.SectionCount,
+			&course.CreatedAt, &course.UpdatedAt)
+	} else {
+		err = r.pool.QueryRow(ctx,
+			`SELECT id, resource_id, title, summary, difficulty_level, style, section_count, created_at, updated_at
+			 FROM courses WHERE id = $1`,
+			id,
+		).Scan(&course.ID, &course.ResourceID, &course.Title, &course.Summary,
+			&course.DifficultyLevel, &course.Style, &course.SectionCount,
+			&course.CreatedAt, &course.UpdatedAt)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return &course, nil
 }
 
-// List 获取课程列表
-func (r *CourseRepo) List(ctx context.Context) ([]model.Course, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, resource_id, title, summary, difficulty_level, style, section_count, created_at, updated_at
-		 FROM courses ORDER BY updated_at DESC LIMIT 50`,
-	)
+// List 获取课程列表（userID 非 nil 时按用户过滤）
+// userID 可为 nil，表示不按用户过滤
+func (r *CourseRepo) List(ctx context.Context, userID ...*uuid.UUID) ([]model.Course, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT id, resource_id, title, summary, difficulty_level, style, section_count, created_at, updated_at
+		 FROM courses`
+	var args []interface{}
+	if uid != nil {
+		query += ` WHERE (user_id = $1 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT 50`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -85,27 +119,50 @@ func (r *CourseRepo) UpdateSectionCount(ctx context.Context, courseID uuid.UUID,
 	return err
 }
 
-// Delete 删除课程
-func (r *CourseRepo) Delete(ctx context.Context, id uuid.UUID) error {
+// Delete 删除课程（userID 非 nil 时校验归属）
+func (r *CourseRepo) Delete(ctx context.Context, id uuid.UUID, userID ...*uuid.UUID) error {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+	if uid != nil {
+		_, err := r.pool.Exec(ctx, `DELETE FROM courses WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)`, id, *uid)
+		return err
+	}
 	_, err := r.pool.Exec(ctx, `DELETE FROM courses WHERE id = $1`, id)
 	return err
 }
 
-// Count 获取课程总数
-func (r *CourseRepo) Count(ctx context.Context) (int, error) {
+// Count 获取课程总数（userID 非 nil 时按用户过滤）
+func (r *CourseRepo) Count(ctx context.Context, userID ...*uuid.UUID) (int, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var count int
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM courses`).Scan(&count)
+	var err error
+	if uid != nil {
+		err = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM courses WHERE (user_id = $1 OR user_id IS NULL)`, *uid).Scan(&count)
+	} else {
+		err = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM courses`).Scan(&count)
+	}
 	return count, err
 }
 
-// CreateSection 创建章节
-func (r *CourseRepo) CreateSection(ctx context.Context, courseID uuid.UUID, title, summary, content string, orderIndex int, objectives, questions string) (*model.CourseSection, error) {
+// CreateSection 创建章节（userID 可为 nil）
+func (r *CourseRepo) CreateSection(ctx context.Context, courseID uuid.UUID, title, summary, content string, orderIndex int, objectives, questions string, userID ...*uuid.UUID) (*model.CourseSection, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var section model.CourseSection
 	err := r.pool.QueryRow(ctx,
-		`INSERT INTO course_sections (course_id, title, summary, content, order_index, learning_objectives, question_prompts)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO course_sections (course_id, title, summary, content, order_index, learning_objectives, question_prompts, user_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING id, course_id, title, summary, content, order_index, learning_objectives, question_prompts, created_at`,
-		courseID, title, summary, content, orderIndex, objectives, questions,
+		courseID, title, summary, content, orderIndex, objectives, questions, uid,
 	).Scan(&section.ID, &section.CourseID, &section.Title, &section.Summary,
 		&section.Content, &section.OrderIndex, &section.LearningObjectives,
 		&section.QuestionPrompts, &section.CreatedAt)

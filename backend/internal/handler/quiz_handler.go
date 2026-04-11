@@ -130,7 +130,7 @@ func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 		} else if attempt != nil {
 			// 写入来源关联：将知识点与测验记录关联
 			if h.sourceLinkRepo != nil && req.Concept != "" {
-				if linkErr := h.sourceLinkRepo.CreateLink(ctx, req.Concept, "quiz", attempt.ID, ""); linkErr != nil {
+				if linkErr := h.sourceLinkRepo.CreateLink(ctx, req.Concept, "quiz", attempt.ID, "", userID); linkErr != nil {
 					log.Printf("写入来源关联失败 (concept=%s, quiz=%s): %v", req.Concept, attempt.ID, linkErr)
 				}
 			}

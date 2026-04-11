@@ -44,7 +44,7 @@ type knowledgeWriter interface {
 
 // sourceLinkWriter 抽象来源关联写入能力，便于测试。
 type sourceLinkWriter interface {
-	CreateLink(ctx context.Context, concept, sourceType string, sourceID uuid.UUID, position string) error
+	CreateLink(ctx context.Context, concept, sourceType string, sourceID uuid.UUID, position string, userID ...*uuid.UUID) error
 }
 
 // URLImportRequest URL 导入请求。
@@ -283,7 +283,7 @@ func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestCont
 				// 写入来源关联：将提取出的知识点与资料建立关联
 				if h.sourceLinkWriter != nil {
 					for _, name := range names {
-						if err := h.sourceLinkWriter.CreateLink(ctx, name, "resource", resource.ID, ""); err != nil {
+						if err := h.sourceLinkWriter.CreateLink(ctx, name, "resource", resource.ID, "", userID); err != nil {
 							log.Printf("写入来源关联失败 (concept=%s, resource=%s): %v", name, resource.ID, err)
 						}
 					}

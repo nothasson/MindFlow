@@ -193,16 +193,38 @@ func (r *QuizRepo) GetWrongBookStats(ctx context.Context, userID ...*uuid.UUID) 
 	return stats, rows.Err()
 }
 
-// MarkWrongBookReviewed 标记错题为已复习
-func (r *QuizRepo) MarkWrongBookReviewed(ctx context.Context, id uuid.UUID) error {
+// MarkWrongBookReviewed 标记错题为已复习（userID 非 nil 时校验归属）
+func (r *QuizRepo) MarkWrongBookReviewed(ctx context.Context, id uuid.UUID, userID ...*uuid.UUID) error {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+	if uid != nil {
+		_, err := r.pool.Exec(ctx,
+			`UPDATE wrong_book SET reviewed = TRUE, review_count = review_count + 1 WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)`,
+			id, *uid,
+		)
+		return err
+	}
 	_, err := r.pool.Exec(ctx,
 		`UPDATE wrong_book SET reviewed = TRUE, review_count = review_count + 1 WHERE id = $1`, id,
 	)
 	return err
 }
 
-// DeleteWrongBookEntry 删除错题
-func (r *QuizRepo) DeleteWrongBookEntry(ctx context.Context, id uuid.UUID) error {
+// DeleteWrongBookEntry 删除错题（userID 非 nil 时校验归属）
+func (r *QuizRepo) DeleteWrongBookEntry(ctx context.Context, id uuid.UUID, userID ...*uuid.UUID) error {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+	if uid != nil {
+		_, err := r.pool.Exec(ctx,
+			`DELETE FROM wrong_book WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)`,
+			id, *uid,
+		)
+		return err
+	}
 	_, err := r.pool.Exec(ctx, `DELETE FROM wrong_book WHERE id = $1`, id)
 	return err
 }

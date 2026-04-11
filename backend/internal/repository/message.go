@@ -56,10 +56,23 @@ func (r *MessageRepo) GetByConversationID(ctx context.Context, conversationID uu
 	return msgs, nil
 }
 
-// CountAll 获取消息总数
-func (r *MessageRepo) CountAll(ctx context.Context) (int, error) {
+// CountAll 获取消息总数（userID 非 nil 时通过 conversations 表过滤）
+func (r *MessageRepo) CountAll(ctx context.Context, userID ...*uuid.UUID) (int, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var count int
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM messages`).Scan(&count)
+	var err error
+	if uid != nil {
+		err = r.pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE (c.user_id = $1 OR c.user_id IS NULL)`,
+			*uid,
+		).Scan(&count)
+	} else {
+		err = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM messages`).Scan(&count)
+	}
 	return count, err
 }
 

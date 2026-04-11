@@ -23,10 +23,12 @@ func NewEvaluationHandler(evalRepo *repository.EvaluationRepo) *EvaluationHandle
 
 // Stats GET /api/evaluations/stats — 返回各类型评估的统计
 func (h *EvaluationHandler) Stats(ctx context.Context, c *app.RequestContext) {
+	userID := getUserIDFromCtx(c)
+
 	// 如果指定了 eval_type，只返回该类型的统计
 	evalType := c.Query("eval_type")
 	if evalType != "" {
-		stats, err := h.evalRepo.GetEvaluationStats(ctx, evalType)
+		stats, err := h.evalRepo.GetEvaluationStats(ctx, evalType, userID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, utils.H{"error": "获取评估统计失败: " + err.Error()})
 			return
@@ -36,7 +38,7 @@ func (h *EvaluationHandler) Stats(ctx context.Context, c *app.RequestContext) {
 	}
 
 	// 返回所有类型的统计
-	stats, err := h.evalRepo.GetAllStats(ctx)
+	stats, err := h.evalRepo.GetAllStats(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取评估统计失败: " + err.Error()})
 		return
@@ -86,7 +88,8 @@ func (h *EvaluationHandler) Create(ctx context.Context, c *app.RequestContext) {
 		req.Details = map[string]interface{}{}
 	}
 
-	if err := h.evalRepo.CreateEvaluation(ctx, req.EvalType, convID, req.Score, req.Details); err != nil {
+	userID := getUserIDFromCtx(c)
+	if err := h.evalRepo.CreateEvaluation(ctx, req.EvalType, convID, req.Score, req.Details, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "保存评估失败: " + err.Error()})
 		return
 	}

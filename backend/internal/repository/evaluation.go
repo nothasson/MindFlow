@@ -25,44 +25,71 @@ type EvaluationStats struct {
 	TotalCount int     `json:"total_count"`
 }
 
-// CreateEvaluation 创建一条评估记录
-func (r *EvaluationRepo) CreateEvaluation(ctx context.Context, evalType string, convID *uuid.UUID, score float64, details map[string]interface{}) error {
+// CreateEvaluation 创建一条评估记录（userID 可为 nil）
+func (r *EvaluationRepo) CreateEvaluation(ctx context.Context, evalType string, convID *uuid.UUID, score float64, details map[string]interface{}, userID ...*uuid.UUID) error {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	detailsJSON, err := json.Marshal(details)
 	if err != nil {
 		detailsJSON = []byte("{}")
 	}
 
 	_, err = r.pool.Exec(ctx,
-		`INSERT INTO llm_evaluations (eval_type, conversation_id, score, details)
-		 VALUES ($1, $2, $3, $4)`,
-		evalType, convID, score, detailsJSON,
+		`INSERT INTO llm_evaluations (eval_type, conversation_id, score, details, user_id)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		evalType, convID, score, detailsJSON, uid,
 	)
 	return err
 }
 
-// GetEvaluationStats 获取指定类型的评估统计（平均分、总次数）
-func (r *EvaluationRepo) GetEvaluationStats(ctx context.Context, evalType string) (*EvaluationStats, error) {
+// GetEvaluationStats 获取指定类型的评估统计（userID 非 nil 时按用户过滤）
+func (r *EvaluationRepo) GetEvaluationStats(ctx context.Context, evalType string, userID ...*uuid.UUID) (*EvaluationStats, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var stats EvaluationStats
 	stats.EvalType = evalType
 
-	err := r.pool.QueryRow(ctx,
-		`SELECT COALESCE(AVG(score), 0), COUNT(*) FROM llm_evaluations WHERE eval_type = $1`,
-		evalType,
-	).Scan(&stats.AvgScore, &stats.TotalCount)
+	var err error
+	if uid != nil {
+		err = r.pool.QueryRow(ctx,
+			`SELECT COALESCE(AVG(score), 0), COUNT(*) FROM llm_evaluations WHERE eval_type = $1 AND (user_id = $2 OR user_id IS NULL)`,
+			evalType, *uid,
+		).Scan(&stats.AvgScore, &stats.TotalCount)
+	} else {
+		err = r.pool.QueryRow(ctx,
+			`SELECT COALESCE(AVG(score), 0), COUNT(*) FROM llm_evaluations WHERE eval_type = $1`,
+			evalType,
+		).Scan(&stats.AvgScore, &stats.TotalCount)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return &stats, nil
 }
 
-// GetAllStats 获取所有评估类型的统计
-func (r *EvaluationRepo) GetAllStats(ctx context.Context) ([]EvaluationStats, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT eval_type, COALESCE(AVG(score), 0), COUNT(*)
-		 FROM llm_evaluations
-		 GROUP BY eval_type
-		 ORDER BY eval_type`,
-	)
+// GetAllStats 获取所有评估类型的统计（userID 非 nil 时按用户过滤）
+func (r *EvaluationRepo) GetAllStats(ctx context.Context, userID ...*uuid.UUID) ([]EvaluationStats, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT eval_type, COALESCE(AVG(score), 0), COUNT(*)
+		 FROM llm_evaluations`
+	var args []interface{}
+	if uid != nil {
+		query += ` WHERE (user_id = $1 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` GROUP BY eval_type ORDER BY eval_type`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

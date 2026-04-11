@@ -95,9 +95,9 @@ func (h *ChatHandler) Handle(ctx context.Context, c *app.RequestContext) {
 
 	// 获取或创建会话（如果配置了数据库）
 	var convID uuid.UUID
+	userID := getUserIDFromCtx(c)
 	if h.convRepo != nil {
 		var err error
-		userID := getUserIDFromCtx(c)
 		convID, err = h.ensureConversation(ctx, req, userID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, utils.H{"error": "会话管理失败: " + err.Error()})
@@ -131,9 +131,9 @@ func (h *ChatHandler) Handle(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if req.Stream {
-		h.handleStream(ctx, c, messages, convID)
+		h.handleStream(ctx, c, messages, convID, userID)
 	} else {
-		h.handleNonStream(ctx, c, messages, convID)
+		h.handleNonStream(ctx, c, messages, convID, userID)
 	}
 }
 
@@ -168,7 +168,7 @@ func (h *ChatHandler) ensureConversation(ctx context.Context, req ChatRequest, u
 }
 
 // handleNonStream 非流式响应
-func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext, messages []*schema.Message, convID uuid.UUID) {
+func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext, messages []*schema.Message, convID uuid.UUID, userID *uuid.UUID) {
 	reply, err := h.orchestrator.Chat(ctx, messages)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "AI 服务错误: " + err.Error()})
@@ -190,10 +190,10 @@ func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext
 			break
 		}
 	}
-	go h.extractAndSaveKnowledge(lastUserMsg, reply)
+	go h.extractAndSaveKnowledge(lastUserMsg, reply, userID)
 
 	// 异步评估对话质量
-	go h.evaluateChatQuality(convID, lastUserMsg, reply)
+	go h.evaluateChatQuality(convID, lastUserMsg, reply, userID)
 
 	c.JSON(http.StatusOK, ChatResponse{
 		ConversationID: convID.String(),
@@ -205,7 +205,7 @@ func (h *ChatHandler) handleNonStream(ctx context.Context, c *app.RequestContext
 }
 
 // handleStream SSE 流式响应
-func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, messages []*schema.Message, convID uuid.UUID) {
+func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, messages []*schema.Message, convID uuid.UUID, userID *uuid.UUID) {
 	reader, err := h.orchestrator.ChatStream(ctx, messages)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "AI 服务错误: " + err.Error()})
@@ -254,10 +254,10 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 					}
 
 					// 异步从对话内容中提取知识点写入知识图谱
-					go h.extractAndSaveKnowledge(lastUserMsg, fullContent.String())
+					go h.extractAndSaveKnowledge(lastUserMsg, fullContent.String(), userID)
 
 					// 异步评估对话质量
-					go h.evaluateChatQuality(convID, lastUserMsg, fullContent.String())
+					go h.evaluateChatQuality(convID, lastUserMsg, fullContent.String(), userID)
 
 					data, _ := json.Marshal(SSEData{Done: true})
 					stream.Publish(&sse.Event{Data: data})
@@ -282,7 +282,7 @@ func (h *ChatHandler) handleStream(ctx context.Context, c *app.RequestContext, m
 
 // extractAndSaveKnowledge 异步从对话内容中提取知识点并写入知识图谱。
 // 在后台 goroutine 中执行，不阻塞响应。
-func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string) {
+func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string, userID *uuid.UUID) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("extractAndSaveKnowledge panic: %v", r)
@@ -353,7 +353,7 @@ func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string) {
 
 // evaluateChatQuality 异步评估对话质量，将评分写入 llm_evaluations 表。
 // 在后台 goroutine 中执行，失败时静默忽略。
-func (h *ChatHandler) evaluateChatQuality(convID uuid.UUID, userMsg, assistantMsg string) {
+func (h *ChatHandler) evaluateChatQuality(convID uuid.UUID, userMsg, assistantMsg string, userID *uuid.UUID) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("evaluateChatQuality panic: %v", r)
@@ -419,7 +419,7 @@ func (h *ChatHandler) evaluateChatQuality(convID uuid.UUID, userMsg, assistantMs
 		"assistant_msg_len": len([]rune(assistantMsg)),
 	}
 
-	if err := h.evalRepo.CreateEvaluation(ctx, "chat_quality", convIDPtr, score, details); err != nil {
+	if err := h.evalRepo.CreateEvaluation(ctx, "chat_quality", convIDPtr, score, details, userID); err != nil {
 		log.Printf("对话质量评估保存失败: %v", err)
 	} else {
 		log.Printf("对话质量评估完成: score=%.2f, conv=%s", score, convID)

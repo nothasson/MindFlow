@@ -72,16 +72,32 @@ func (r *ResourceRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status st
 	return err
 }
 
-// GetByID 按 ID 获取资料
-func (r *ResourceRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Resource, error) {
+// GetByID 按 ID 获取资料（userID 非 nil 时校验归属）
+func (r *ResourceRepo) GetByID(ctx context.Context, id uuid.UUID, userID ...*uuid.UUID) (*model.Resource, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var res model.Resource
-	err := r.pool.QueryRow(ctx, `
-		SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, summary, questions, created_at, updated_at
-		FROM resources WHERE id = $1
-	`, id).Scan(
-		&res.ID, &res.SourceType, &res.Title, &res.OriginalFilename, &res.SourceURL,
-		&res.ContentText, &res.Pages, &res.ChunkCount, &res.Status, &res.Summary, &res.Questions, &res.CreatedAt, &res.UpdatedAt,
-	)
+	var err error
+	if uid != nil {
+		err = r.pool.QueryRow(ctx, `
+			SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, summary, questions, created_at, updated_at
+			FROM resources WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)
+		`, id, *uid).Scan(
+			&res.ID, &res.SourceType, &res.Title, &res.OriginalFilename, &res.SourceURL,
+			&res.ContentText, &res.Pages, &res.ChunkCount, &res.Status, &res.Summary, &res.Questions, &res.CreatedAt, &res.UpdatedAt,
+		)
+	} else {
+		err = r.pool.QueryRow(ctx, `
+			SELECT id, source_type, title, original_filename, source_url, content_text, pages, chunk_count, status, summary, questions, created_at, updated_at
+			FROM resources WHERE id = $1
+		`, id).Scan(
+			&res.ID, &res.SourceType, &res.Title, &res.OriginalFilename, &res.SourceURL,
+			&res.ContentText, &res.Pages, &res.ChunkCount, &res.Status, &res.Summary, &res.Questions, &res.CreatedAt, &res.UpdatedAt,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}

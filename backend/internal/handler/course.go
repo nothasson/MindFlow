@@ -38,8 +38,10 @@ func (h *CourseHandler) GenerateFromResource(ctx context.Context, c *app.Request
 		return
 	}
 
-	// 获取资源
-	resource, err := h.resourceRepo.GetByID(ctx, resourceID)
+	userID := getUserIDFromCtx(c)
+
+	// 获取资源（按用户归属校验）
+	resource, err := h.resourceRepo.GetByID(ctx, resourceID, userID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, utils.H{"error": "资源不存在"})
 		return
@@ -71,8 +73,8 @@ func (h *CourseHandler) GenerateFromResource(ctx context.Context, c *app.Request
 		return
 	}
 
-	// 保存课程
-	course, err := h.courseRepo.Create(ctx, &resourceID, resource.Title, outline, req.Difficulty, "socratic")
+	// 保存课程（关联 userID）
+	course, err := h.courseRepo.Create(ctx, &resourceID, resource.Title, outline, req.Difficulty, "socratic", userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "保存课程失败: " + err.Error()})
 		return
@@ -86,7 +88,8 @@ func (h *CourseHandler) GenerateFromResource(ctx context.Context, c *app.Request
 
 // List GET /api/courses
 func (h *CourseHandler) List(ctx context.Context, c *app.RequestContext) {
-	courses, err := h.courseRepo.List(ctx)
+	userID := getUserIDFromCtx(c)
+	courses, err := h.courseRepo.List(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取课程列表失败: " + err.Error()})
 		return
@@ -106,7 +109,8 @@ func (h *CourseHandler) GetByID(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	course, err := h.courseRepo.GetByID(ctx, id)
+	userID := getUserIDFromCtx(c)
+	course, err := h.courseRepo.GetByID(ctx, id, userID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, utils.H{"error": "课程不存在"})
 		return
@@ -133,7 +137,8 @@ func (h *CourseHandler) Delete(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	if err := h.courseRepo.Delete(ctx, id); err != nil {
+	userID := getUserIDFromCtx(c)
+	if err := h.courseRepo.Delete(ctx, id, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "删除课程失败: " + err.Error()})
 		return
 	}

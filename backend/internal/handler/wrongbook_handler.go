@@ -59,7 +59,8 @@ func (h *WrongBookHandler) MarkReviewed(ctx context.Context, c *app.RequestConte
 		return
 	}
 
-	if err := h.quizRepo.MarkWrongBookReviewed(ctx, id); err != nil {
+	userID := getUserIDFromCtx(c)
+	if err := h.quizRepo.MarkWrongBookReviewed(ctx, id, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "标记失败: " + err.Error()})
 		return
 	}
@@ -75,7 +76,8 @@ func (h *WrongBookHandler) Delete(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	if err := h.quizRepo.DeleteWrongBookEntry(ctx, id); err != nil {
+	userID := getUserIDFromCtx(c)
+	if err := h.quizRepo.DeleteWrongBookEntry(ctx, id, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "删除失败: " + err.Error()})
 		return
 	}

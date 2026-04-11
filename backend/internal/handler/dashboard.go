@@ -71,14 +71,14 @@ func (h *DashboardHandler) Stats(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// 消息数（单条 SQL）
-	totalMessages, _ := h.msgRepo.CountAll(ctx)
+	// 消息数（单条 SQL，按用户过滤）
+	totalMessages, _ := h.msgRepo.CountAll(ctx, userID)
 
-	// 资料数（单条 SQL）
+	// 资料数（单条 SQL，按用户过滤）
 	totalResources, _ := h.resourceRepo.Count(ctx, userID)
 
-	// 课程数（单条 SQL）
-	totalCourses, _ := h.courseRepo.Count(ctx)
+	// 课程数（单条 SQL，按用户过滤）
+	totalCourses, _ := h.courseRepo.Count(ctx, userID)
 
 	// 学习天数（SQL 聚合）
 	totalDays, _ := h.convRepo.CountDistinctDays(ctx, userID)

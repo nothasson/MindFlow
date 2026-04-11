@@ -19,12 +19,17 @@ func NewSourceLinkRepo(db *DB) *SourceLinkRepo {
 	return &SourceLinkRepo{pool: db.Pool}
 }
 
-// CreateLink 创建知识点与来源的关联
-func (r *SourceLinkRepo) CreateLink(ctx context.Context, concept, sourceType string, sourceID uuid.UUID, position string) error {
+// CreateLink 创建知识点与来源的关联（userID 可为 nil）
+func (r *SourceLinkRepo) CreateLink(ctx context.Context, concept, sourceType string, sourceID uuid.UUID, position string, userID ...*uuid.UUID) error {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO knowledge_source_links (concept, source_type, source_id, page_or_position)
-		 VALUES ($1, $2, $3, $4)`,
-		concept, sourceType, sourceID, position,
+		`INSERT INTO knowledge_source_links (concept, source_type, source_id, page_or_position, user_id)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		concept, sourceType, sourceID, position, uid,
 	)
 	return err
 }
