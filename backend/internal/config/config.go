@@ -39,7 +39,7 @@ func Load() *Config {
 		Port:          getEnv("BACKEND_PORT", "8080"),
 		LLMAPIKey:     getEnv("LLM_API_KEY", ""),
 		LLMBaseURL:    getEnv("LLM_BASE_URL", "https://api.siliconflow.cn/v1"),
-		LLMModel:      getEnv("LLM_MODEL", "Pro/MiniMaxAI/MiniMax-M2.5"),
+		LLMModel:      getEnv("LLM_MODEL", "Pro/zai-org/GLM-5.1"),
 		PostgresDSN:   getEnv("POSTGRES_DSN", ""),
 		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
 		QdrantAddr:    getEnv("QDRANT_ADDR", "localhost:6334"),

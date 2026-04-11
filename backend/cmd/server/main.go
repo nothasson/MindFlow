@@ -197,7 +197,7 @@ func main() {
 			"providers": modelSwitch.Providers(),
 		})
 	})
-	h.PUT("/api/settings/provider", func(ctx context.Context, c *app.RequestContext) {
+	h.PUT("/api/settings/provider", handler.JWTAuth(cfg.JWTSecret), func(ctx context.Context, c *app.RequestContext) {
 		var req struct {
 			Provider string `json:"provider"`
 		}
