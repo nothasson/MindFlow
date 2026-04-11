@@ -170,7 +170,19 @@ func (o *Orchestrator) Chat(ctx context.Context, messages []*schema.Message) (st
 	case AgentTypeCurriculum:
 		reply, err = o.curriculum.Plan(ctx, messages)
 	case AgentTypeDiagnostic:
-		reply, err = o.diagnostic.Diagnose(ctx, messages)
+		// 先诊断，然后把诊断结果交给 Tutor 做引导式回复（不直接暴露 JSON 给用户）
+		diagResult, diagErr := o.diagnostic.Diagnose(ctx, messages)
+		if diagErr != nil {
+			reply, err = o.tutor.Chat(ctx, messages) // 诊断失败时降级为普通教学
+		} else {
+			// 把诊断结果作为 system 提示注入 tutor
+			augmented := make([]*schema.Message, 0, len(messages)+2)
+			augmented = append(augmented, messages...)
+			augmented = append(augmented, schema.SystemMessage(
+				"以下是对学生回答的诊断结果（仅供你参考，不要直接展示给学生）：\n"+diagResult+
+					"\n请根据诊断结果，用苏格拉底式引导帮助学生改进。"))
+			reply, err = o.tutor.Chat(ctx, augmented)
+		}
 	case AgentTypeReview:
 		reply, err = o.review.Review(ctx, messages)
 	case AgentTypeContent:
@@ -232,7 +244,17 @@ func (o *Orchestrator) ChatStream(ctx context.Context, messages []*schema.Messag
 	case AgentTypeCurriculum:
 		return o.curriculum.PlanStream(ctx, messages)
 	case AgentTypeDiagnostic:
-		return o.diagnostic.DiagnoseStream(ctx, messages)
+		// 先同步诊断，再把结果注入 tutor 做流式引导
+		diagResult, diagErr := o.diagnostic.Diagnose(ctx, messages)
+		if diagErr != nil {
+			return o.tutor.ChatStream(ctx, messages)
+		}
+		augmented := make([]*schema.Message, 0, len(messages)+2)
+		augmented = append(augmented, messages...)
+		augmented = append(augmented, schema.SystemMessage(
+			"以下是对学生回答的诊断结果（仅供你参考，不要直接展示给学生）：\n"+diagResult+
+				"\n请根据诊断结果，用苏格拉底式引导帮助学生改进。"))
+		return o.tutor.ChatStream(ctx, augmented)
 	case AgentTypeReview:
 		return o.review.ReviewStream(ctx, messages)
 	case AgentTypeContent:

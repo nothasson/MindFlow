@@ -71,7 +71,7 @@ function MainShellInner({ children }: MainShellProps) {
   return (
     <AppShell
       onNewChat={handleNewChat}
-      sidebar={(onCollapse) => (
+      sidebar={(onCollapse, user, onLogout) => (
         <Sidebar
           conversations={conversations}
           currentConversationId={currentConversationId}
@@ -79,6 +79,8 @@ function MainShellInner({ children }: MainShellProps) {
           onDeleteConversation={handleDeleteConversation}
           onNewChat={handleNewChat}
           onCollapse={onCollapse}
+          user={user}
+          onLogout={onLogout}
         />
       )}
     >
