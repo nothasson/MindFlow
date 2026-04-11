@@ -39,7 +39,7 @@ type resourceStore interface {
 
 // knowledgeWriter 抽象知识点写入能力，便于测试。
 type knowledgeWriter interface {
-	UpsertExtractedPoints(ctx context.Context, points []repository.ExtractedKnowledgePoint) error
+	UpsertExtractedPoints(ctx context.Context, points []repository.ExtractedKnowledgePoint, userID *uuid.UUID) error
 }
 
 // sourceLinkWriter 抽象来源关联写入能力，便于测试。
@@ -267,7 +267,7 @@ func (h *ResourceHandler) ingestResource(ctx context.Context, c *app.RequestCont
 			names = append(names, point.Concept)
 		}
 		if len(points) > 0 {
-			if err := h.knowledgeWriter.UpsertExtractedPoints(ctx, points); err != nil {
+			if err := h.knowledgeWriter.UpsertExtractedPoints(ctx, points, userID); err != nil {
 				warnings = append(warnings, "知识图谱写入失败: "+err.Error())
 			} else {
 				response["knowledge_points"] = names

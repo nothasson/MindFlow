@@ -1,6 +1,6 @@
 import type { ChatRequest, ChatResponse, Conversation, DailyBriefing, KnowledgeGraph, KnowledgeSourceLink, Message, ResourceUploadResult, SSEEvent } from "@/lib/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 // ===== Token 管理 =====
 

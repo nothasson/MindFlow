@@ -7,6 +7,7 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/google/uuid"
 
 	"github.com/nothasson/MindFlow/backend/internal/knowledge"
 	"github.com/nothasson/MindFlow/backend/internal/model"
@@ -52,7 +53,7 @@ func (h *KnowledgeHandler) Graph(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	edges, err := h.repo.ListEdges(ctx)
+	edges, err := h.repo.ListEdges(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取知识关系失败: " + err.Error()})
 		return
@@ -80,7 +81,8 @@ func (h *KnowledgeHandler) PrerequisiteChain(ctx context.Context, c *app.Request
 		return
 	}
 
-	chain, err := h.repo.GetPrerequisiteChain(ctx, concept, 5)
+	userID := getUserIDFromCtx(c)
+	chain, err := h.repo.GetPrerequisiteChain(ctx, concept, 5, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "查询前置知识链失败: " + err.Error()})
 		return
@@ -104,7 +106,7 @@ func (h *KnowledgeHandler) LearningPath(ctx context.Context, c *app.RequestConte
 		return
 	}
 
-	edges, err := h.repo.ListEdges(ctx)
+	edges, err := h.repo.ListEdges(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "获取知识关系失败: " + err.Error()})
 		return
@@ -149,7 +151,13 @@ func (h *KnowledgeHandler) DeleteConcept(ctx context.Context, c *app.RequestCont
 		return
 	}
 
-	if err := h.repo.DeleteByConcept(ctx, concept); err != nil {
+	userID := getUserIDFromCtx(c)
+	if userID == nil || *userID == uuid.Nil {
+		c.JSON(http.StatusUnauthorized, utils.H{"error": "需要登录才能删除知识点"})
+		return
+	}
+
+	if err := h.repo.DeleteByConcept(ctx, concept, *userID); err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "删除失败: " + err.Error()})
 		return
 	}
@@ -171,7 +179,8 @@ func (h *KnowledgeHandler) Sources(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	links, err := h.sourceLinkRepo.GetLinksByConcept(ctx, concept)
+	userID := getUserIDFromCtx(c)
+	links, err := h.sourceLinkRepo.GetLinksByConcept(ctx, concept, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, utils.H{"error": "查询来源失败: " + err.Error()})
 		return

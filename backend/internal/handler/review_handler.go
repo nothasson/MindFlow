@@ -35,7 +35,7 @@ func (h *ReviewHandler) Due(ctx context.Context, c *app.RequestContext) {
 
 	// 查询相似概念对，对复习列表做交错排序
 	if len(items) > 1 {
-		similarPairs, pairErr := h.knowledgeRepo.GetSimilarPairs(ctx)
+		similarPairs, pairErr := h.knowledgeRepo.GetSimilarPairs(ctx, userID)
 		if pairErr != nil {
 			log.Printf("获取相似概念对失败，跳过交错排序: %v", pairErr)
 		} else if len(similarPairs) > 0 {

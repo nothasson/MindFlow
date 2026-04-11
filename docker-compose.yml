@@ -91,8 +91,8 @@ services:
       - AI_SERVICE_PORT=8000
       - QDRANT_URL=http://qdrant:6333
       - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
-      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.siliconflow.cn/v1}
+      - LLM_MODEL=${LLM_MODEL:-Pro/zai-org/GLM-5.1}
     depends_on:
       qdrant:
         condition: service_healthy

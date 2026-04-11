@@ -97,13 +97,25 @@ func (r *KnowledgeRepo) ListNodes(ctx context.Context, userID ...*uuid.UUID) ([]
 }
 
 // ListEdges 获取所有知识点关系
-func (r *KnowledgeRepo) ListEdges(ctx context.Context) ([]KnowledgeEdge, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, from_concept, relation_type, to_concept
-		 FROM knowledge_relations
-		 WHERE valid_to IS NULL OR valid_to > NOW()
-		 ORDER BY from_concept`,
-	)
+// userID 可为 nil，表示不按用户过滤（兼容无登录状态）
+func (r *KnowledgeRepo) ListEdges(ctx context.Context, userID ...*uuid.UUID) ([]KnowledgeEdge, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT DISTINCT kr.id, kr.from_concept, kr.relation_type, kr.to_concept
+		 FROM knowledge_relations kr
+		 JOIN knowledge_mastery km ON (km.concept = kr.from_concept OR km.concept = kr.to_concept)
+		 WHERE (kr.valid_to IS NULL OR kr.valid_to > NOW())`
+	var args []interface{}
+	if uid != nil {
+		query += ` AND (km.user_id = $1 OR km.user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY kr.from_concept`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +136,7 @@ func (r *KnowledgeRepo) ListEdges(ctx context.Context) ([]KnowledgeEdge, error) 
 }
 
 // UpsertExtractedPoints 写入资料提取出的知识点及关系。
-func (r *KnowledgeRepo) UpsertExtractedPoints(ctx context.Context, points []ExtractedKnowledgePoint) error {
+func (r *KnowledgeRepo) UpsertExtractedPoints(ctx context.Context, points []ExtractedKnowledgePoint, userID *uuid.UUID) error {
 	for _, point := range points {
 		bloomLevel := point.BloomLevel
 		if bloomLevel == "" {
@@ -139,17 +151,18 @@ func (r *KnowledgeRepo) UpsertExtractedPoints(ctx context.Context, points []Extr
 			granularity = 3
 		}
 
-		// upsert 知识点，包含新字段
+		// upsert 知识点，包含 user_id 字段
 		if _, err := r.pool.Exec(ctx, `
-			INSERT INTO knowledge_mastery (concept, description, bloom_level, importance, granularity_level, confidence, updated_at)
-			VALUES ($1, $2, $3, $4, $5, 0.0, NOW())
+			INSERT INTO knowledge_mastery (concept, description, bloom_level, importance, granularity_level, confidence, updated_at, user_id)
+			VALUES ($1, $2, $3, $4, $5, 0.0, NOW(), $6)
 			ON CONFLICT (concept) DO UPDATE SET
 				description = CASE WHEN EXCLUDED.description != '' THEN EXCLUDED.description ELSE knowledge_mastery.description END,
 				bloom_level = EXCLUDED.bloom_level,
 				importance = EXCLUDED.importance,
 				granularity_level = EXCLUDED.granularity_level,
+				user_id = CASE WHEN $6 IS NOT NULL THEN $6 ELSE knowledge_mastery.user_id END,
 				updated_at = NOW()
-		`, point.Concept, point.Description, bloomLevel, importance, granularity); err != nil {
+		`, point.Concept, point.Description, bloomLevel, importance, granularity, userID); err != nil {
 			return err
 		}
 
@@ -167,12 +180,14 @@ func (r *KnowledgeRepo) UpsertExtractedPoints(ctx context.Context, points []Extr
 				relType = "prerequisite"
 			}
 
-			// 确保关系目标也存在于知识图谱
+			// 确保关系目标也存在于知识图谱（带 user_id）
 			if _, err := r.pool.Exec(ctx, `
-				INSERT INTO knowledge_mastery (concept, confidence, updated_at)
-				VALUES ($1, 0.0, NOW())
-				ON CONFLICT (concept) DO UPDATE SET updated_at = NOW()
-			`, rel.Target); err != nil {
+				INSERT INTO knowledge_mastery (concept, confidence, updated_at, user_id)
+				VALUES ($1, 0.0, NOW(), $2)
+				ON CONFLICT (concept) DO UPDATE SET
+					user_id = CASE WHEN $2 IS NOT NULL THEN $2 ELSE knowledge_mastery.user_id END,
+					updated_at = NOW()
+			`, rel.Target, userID); err != nil {
 				return err
 			}
 
@@ -204,10 +219,12 @@ func (r *KnowledgeRepo) UpsertExtractedPoints(ctx context.Context, points []Extr
 			}
 
 			if _, err := r.pool.Exec(ctx, `
-				INSERT INTO knowledge_mastery (concept, confidence, updated_at)
-				VALUES ($1, 0.0, NOW())
-				ON CONFLICT (concept) DO UPDATE SET updated_at = NOW()
-			`, prereq); err != nil {
+				INSERT INTO knowledge_mastery (concept, confidence, updated_at, user_id)
+				VALUES ($1, 0.0, NOW(), $2)
+				ON CONFLICT (concept) DO UPDATE SET
+					user_id = CASE WHEN $2 IS NOT NULL THEN $2 ELSE knowledge_mastery.user_id END,
+					updated_at = NOW()
+			`, prereq, userID); err != nil {
 				return err
 			}
 
@@ -350,12 +367,12 @@ func (r *KnowledgeRepo) GetWeakPoints(ctx context.Context, limit int, userID ...
 }
 
 // UpdateMasteryWithSM2 使用 SM-2 算法评分更新知识点掌握度
-func (r *KnowledgeRepo) UpdateMasteryWithSM2(ctx context.Context, concept string, score int) error {
+func (r *KnowledgeRepo) UpdateMasteryWithSM2(ctx context.Context, concept string, score int, userID uuid.UUID) error {
 	var ef float64
 	var intervalDays, repetitions int
 	err := r.pool.QueryRow(ctx,
-		`SELECT easiness_factor, interval_days, repetitions FROM knowledge_mastery WHERE concept = $1`,
-		concept,
+		`SELECT easiness_factor, interval_days, repetitions FROM knowledge_mastery WHERE concept = $1 AND user_id = $2`,
+		concept, userID,
 	).Scan(&ef, &intervalDays, &repetitions)
 	if err != nil {
 		return err
@@ -376,15 +393,15 @@ func (r *KnowledgeRepo) UpdateMasteryWithSM2(ctx context.Context, concept string
 		`UPDATE knowledge_mastery
 		 SET confidence = $1, easiness_factor = $2, interval_days = $3, repetitions = $4,
 		     next_review = $5, last_reviewed = NOW(), updated_at = NOW()
-		 WHERE concept = $6`,
+		 WHERE concept = $6 AND user_id = $7`,
 		newConfidence, updated.EasinessFactor, updated.Interval, updated.Repetitions,
-		time.Now().AddDate(0, 0, updated.Interval), concept,
+		time.Now().AddDate(0, 0, updated.Interval), concept, userID,
 	)
 	return err
 }
 
 // UpdateMasteryWithFSRS 使用 FSRS 算法评分更新知识点掌握度
-func (r *KnowledgeRepo) UpdateMasteryWithFSRS(ctx context.Context, concept string, rating review.Rating) error {
+func (r *KnowledgeRepo) UpdateMasteryWithFSRS(ctx context.Context, concept string, rating review.Rating, userID uuid.UUID) error {
 	var stability, difficulty float64
 	var elapsedDays, scheduledDays, reps, lapses int
 	var state int16
@@ -392,8 +409,8 @@ func (r *KnowledgeRepo) UpdateMasteryWithFSRS(ctx context.Context, concept strin
 
 	err := r.pool.QueryRow(ctx,
 		`SELECT stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_reviewed, next_review
-		 FROM knowledge_mastery WHERE concept = $1`,
-		concept,
+		 FROM knowledge_mastery WHERE concept = $1 AND user_id = $2`,
+		concept, userID,
 	).Scan(&stability, &difficulty, &elapsedDays, &scheduledDays, &reps, &lapses, &state, &lastReviewed, &nextReview)
 	if err != nil {
 		return err
@@ -421,17 +438,31 @@ func (r *KnowledgeRepo) UpdateMasteryWithFSRS(ctx context.Context, concept strin
 		     elapsed_days = $4, scheduled_days = $5, reps = $6, lapses = $7, state = $8,
 		     next_review = $9, last_reviewed = NOW(), updated_at = NOW(),
 		     interval_days = $10, repetitions = $6
-		 WHERE concept = $11`,
+		 WHERE concept = $11 AND user_id = $12`,
 		newConfidence, updated.Stability, updated.Difficulty,
 		updated.ElapsedDays, updated.ScheduledDays, updated.Reps, updated.Lapses, int16(updated.State),
-		updated.NextReview, updated.ScheduledDays, concept,
+		updated.NextReview, updated.ScheduledDays, concept, userID,
 	)
 	return err
 }
 
 // ListConceptNames 获取所有已有概念名称（轻量查询，用于去重）
-func (r *KnowledgeRepo) ListConceptNames(ctx context.Context) ([]string, error) {
-	rows, err := r.pool.Query(ctx, `SELECT concept FROM knowledge_mastery ORDER BY concept`)
+// userID 可为 nil，表示不按用户过滤
+func (r *KnowledgeRepo) ListConceptNames(ctx context.Context, userID ...*uuid.UUID) ([]string, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT concept FROM knowledge_mastery`
+	var args []interface{}
+	if uid != nil {
+		query += ` WHERE (user_id = $1 OR user_id IS NULL)`
+		args = append(args, *uid)
+	}
+	query += ` ORDER BY concept`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -449,18 +480,31 @@ func (r *KnowledgeRepo) ListConceptNames(ctx context.Context) ([]string, error) 
 }
 
 // DeleteByConcept 删除指定知识点（含关系）
-func (r *KnowledgeRepo) DeleteByConcept(ctx context.Context, concept string) error {
+func (r *KnowledgeRepo) DeleteByConcept(ctx context.Context, concept string, userID uuid.UUID) error {
 	_, _ = r.pool.Exec(ctx, `DELETE FROM knowledge_relations WHERE from_concept = $1 OR to_concept = $1`, concept)
-	_, err := r.pool.Exec(ctx, `DELETE FROM knowledge_mastery WHERE concept = $1`, concept)
+	_, err := r.pool.Exec(ctx, `DELETE FROM knowledge_mastery WHERE concept = $1 AND user_id = $2`, concept, userID)
 	return err
 }
 
 // GetConceptConfidence 查询指定概念的掌握度（confidence）
-func (r *KnowledgeRepo) GetConceptConfidence(ctx context.Context, concept string) (float64, error) {
+// userID 可为 nil，表示不按用户过滤
+func (r *KnowledgeRepo) GetConceptConfidence(ctx context.Context, concept string, userID ...*uuid.UUID) (float64, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	var confidence float64
-	err := r.pool.QueryRow(ctx,
-		`SELECT confidence FROM knowledge_mastery WHERE concept = $1`, concept,
-	).Scan(&confidence)
+	var err error
+	if uid != nil {
+		err = r.pool.QueryRow(ctx,
+			`SELECT confidence FROM knowledge_mastery WHERE concept = $1 AND (user_id = $2 OR user_id IS NULL)`, concept, *uid,
+		).Scan(&confidence)
+	} else {
+		err = r.pool.QueryRow(ctx,
+			`SELECT confidence FROM knowledge_mastery WHERE concept = $1`, concept,
+		).Scan(&confidence)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -468,13 +512,25 @@ func (r *KnowledgeRepo) GetConceptConfidence(ctx context.Context, concept string
 }
 
 // GetSimilarPairs 获取所有 similar 关系对，返回 map[概念][]相似概念
-func (r *KnowledgeRepo) GetSimilarPairs(ctx context.Context) (map[string][]string, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT from_concept, to_concept
-		 FROM knowledge_relations
-		 WHERE relation_type = 'similar'
-		   AND (valid_to IS NULL OR valid_to > NOW())`,
-	)
+// userID 可为 nil，表示不按用户过滤
+func (r *KnowledgeRepo) GetSimilarPairs(ctx context.Context, userID ...*uuid.UUID) (map[string][]string, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
+	query := `SELECT kr.from_concept, kr.to_concept
+		 FROM knowledge_relations kr
+		 JOIN knowledge_mastery km ON (km.concept = kr.from_concept OR km.concept = kr.to_concept)
+		 WHERE kr.relation_type = 'similar'
+		   AND (kr.valid_to IS NULL OR kr.valid_to > NOW())`
+	var args []interface{}
+	if uid != nil {
+		query += ` AND (km.user_id = $1 OR km.user_id IS NULL)`
+		args = append(args, *uid)
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -496,10 +552,10 @@ func (r *KnowledgeRepo) GetSimilarPairs(ctx context.Context) (map[string][]strin
 }
 
 // UpdateErrorType 更新知识点的错误类型
-func (r *KnowledgeRepo) UpdateErrorType(ctx context.Context, concept string, errorType string) error {
+func (r *KnowledgeRepo) UpdateErrorType(ctx context.Context, concept string, errorType string, userID uuid.UUID) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE knowledge_mastery SET error_type = $1, updated_at = NOW() WHERE concept = $2`,
-		errorType, concept,
+		`UPDATE knowledge_mastery SET error_type = $1, updated_at = NOW() WHERE concept = $2 AND user_id = $3`,
+		errorType, concept, userID,
 	)
 	return err
 }
@@ -515,7 +571,12 @@ type PrerequisiteChainNode struct {
 
 // GetPrerequisiteChain 递归查找薄弱前置知识
 // 使用 PostgreSQL 递归 CTE，只返回 confidence < 0.5 的薄弱前置节点
-func (r *KnowledgeRepo) GetPrerequisiteChain(ctx context.Context, concept string, maxDepth int) ([]PrerequisiteChainNode, error) {
+func (r *KnowledgeRepo) GetPrerequisiteChain(ctx context.Context, concept string, maxDepth int, userID ...*uuid.UUID) ([]PrerequisiteChainNode, error) {
+	var uid *uuid.UUID
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
+
 	query := `
 		WITH RECURSIVE prereq_chain AS (
 			-- 基准：找到目标概念的直接前置知识
@@ -524,8 +585,17 @@ func (r *KnowledgeRepo) GetPrerequisiteChain(ctx context.Context, concept string
 			JOIN knowledge_mastery km ON km.concept = kr.to_concept
 			WHERE kr.from_concept = $1
 			  AND kr.relation_type = 'prerequisite'
-			  AND (kr.valid_to IS NULL OR kr.valid_to > NOW())
+			  AND (kr.valid_to IS NULL OR kr.valid_to > NOW())`
 
+	var args []interface{}
+	args = append(args, concept)
+
+	if uid != nil {
+		query += ` AND (km.user_id = $3 OR km.user_id IS NULL)`
+		args = append(args, *uid)
+	}
+
+	query += `
 			UNION
 
 			-- 递归：沿前置关系继续向上追踪
@@ -535,7 +605,13 @@ func (r *KnowledgeRepo) GetPrerequisiteChain(ctx context.Context, concept string
 			JOIN knowledge_mastery km ON km.concept = kr.to_concept
 			WHERE kr.relation_type = 'prerequisite'
 			  AND (kr.valid_to IS NULL OR kr.valid_to > NOW())
-			  AND pc.depth < $2
+			  AND pc.depth < $2`
+
+	if uid != nil {
+		query += ` AND (km.user_id = $3 OR km.user_id IS NULL)`
+	}
+
+	query += `
 		)
 		SELECT DISTINCT ON (concept) id, concept, confidence, error_type, depth
 		FROM prereq_chain
@@ -543,7 +619,9 @@ func (r *KnowledgeRepo) GetPrerequisiteChain(ctx context.Context, concept string
 		ORDER BY concept, depth ASC
 	`
 
-	rows, err := r.pool.Query(ctx, query, concept, maxDepth)
+	args = append(args, maxDepth)
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

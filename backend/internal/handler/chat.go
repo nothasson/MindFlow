@@ -303,7 +303,7 @@ func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string, user
 	defer cancel()
 
 	// 查询已有概念名称，传给 LLM 做去重
-	existingNames, _ := h.knowledgeRepo.ListConceptNames(ctx)
+	existingNames, _ := h.knowledgeRepo.ListConceptNames(ctx, userID)
 
 	extractResult, err := h.aiClient.ExtractKnowledgePointsWithContext(text, existingNames)
 	if err != nil {
@@ -340,7 +340,7 @@ func (h *ChatHandler) extractAndSaveKnowledge(userMsg, assistantMsg string, user
 		return
 	}
 
-	if err := h.knowledgeRepo.UpsertExtractedPoints(ctx, points); err != nil {
+	if err := h.knowledgeRepo.UpsertExtractedPoints(ctx, points, userID); err != nil {
 		log.Printf("对话知识点写入知识图谱失败: %v", err)
 	} else {
 		names := make([]string, len(points))

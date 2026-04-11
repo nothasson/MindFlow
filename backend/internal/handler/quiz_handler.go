@@ -11,6 +11,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
 
 	"github.com/nothasson/MindFlow/backend/internal/agent"
 	"github.com/nothasson/MindFlow/backend/internal/repository"
@@ -55,7 +56,7 @@ func (h *QuizHandler) Generate(ctx context.Context, c *app.RequestContext) {
 
 	// 尝试查询 confidence，有则使用 Bloom 分层出题
 	if h.knowledgeRepo != nil {
-		confidence, err := h.knowledgeRepo.GetConceptConfidence(ctx, req.Concept)
+		confidence, err := h.knowledgeRepo.GetConceptConfidence(ctx, req.Concept, userID)
 		if err == nil {
 			result, genErr := h.quiz.GenerateQuizWithBloom(genCtx, req.Concept, confidence)
 			if genErr != nil {
@@ -151,7 +152,9 @@ func (h *QuizHandler) Submit(ctx context.Context, c *app.RequestContext) {
 	// 更新遗忘曲线掌握度（FSRS 算法）
 	if h.knowledgeRepo != nil && req.Concept != "" {
 		rating := review.ScoreToRating(score)
-		if err := h.knowledgeRepo.UpdateMasteryWithFSRS(ctx, req.Concept, rating); err != nil {
+		if userID == nil || *userID == uuid.Nil {
+			log.Printf("Submit: 无法更新掌握度，缺少有效 userID")
+		} else if err := h.knowledgeRepo.UpdateMasteryWithFSRS(ctx, req.Concept, rating, *userID); err != nil {
 			log.Printf("更新掌握度失败: %v", err)
 		}
 	}
@@ -259,7 +262,9 @@ func (h *QuizHandler) ConversationalQuiz(ctx context.Context, c *app.RequestCont
 		}
 		if finalScore > 0 {
 			rating := review.ScoreToRating(finalScore)
-			if err := h.knowledgeRepo.UpdateMasteryWithFSRS(ctx, req.Concept, rating); err != nil {
+			if userID == nil || *userID == uuid.Nil {
+				log.Printf("ConversationalQuiz: 无法更新掌握度，缺少有效 userID")
+			} else if err := h.knowledgeRepo.UpdateMasteryWithFSRS(ctx, req.Concept, rating, *userID); err != nil {
 				log.Printf("对话考察更新掌握度失败: %v", err)
 			}
 		}
@@ -293,7 +298,9 @@ func (h *QuizHandler) AnkiRate(ctx context.Context, c *app.RequestContext) {
 
 	if h.knowledgeRepo != nil {
 		// FSRS Rating: 1=Again, 2=Hard, 3=Good, 4=Easy
-		if err := h.knowledgeRepo.UpdateMasteryWithFSRS(ctx, req.Concept, review.Rating(req.Rating)); err != nil {
+		if userID == nil || *userID == uuid.Nil {
+			log.Printf("AnkiRate: 无法更新掌握度，缺少有效 userID")
+		} else if err := h.knowledgeRepo.UpdateMasteryWithFSRS(ctx, req.Concept, review.Rating(req.Rating), *userID); err != nil {
 			log.Printf("Anki 评分更新掌握度失败: %v", err)
 			c.JSON(http.StatusInternalServerError, utils.H{"error": "更新失败"})
 			return

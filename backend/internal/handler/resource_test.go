@@ -91,7 +91,7 @@ type stubKnowledgeWriter struct {
 	points []repository.ExtractedKnowledgePoint
 }
 
-func (s *stubKnowledgeWriter) UpsertExtractedPoints(ctx context.Context, points []repository.ExtractedKnowledgePoint) error {
+func (s *stubKnowledgeWriter) UpsertExtractedPoints(ctx context.Context, points []repository.ExtractedKnowledgePoint, userID *uuid.UUID) error {
 	s.points = append(s.points, points...)
 	return nil
 }
