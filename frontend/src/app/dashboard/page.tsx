@@ -355,14 +355,9 @@ export default function DashboardPage() {
     <MainShell>
       <div className="flex h-full flex-col bg-[#EEECE2]">
         <div className="mx-auto w-full max-w-4xl overflow-y-auto px-4 py-12">
-          {/* 标题 + 快捷入口 + 连续学习徽章 */}
-          <div className="mb-8 flex items-start justify-between">
-            <div>
-              <h1 className="mb-2 text-2xl font-semibold text-stone-800">
-                学习数据
-              </h1>
-              <p className="text-sm text-stone-500">跟踪你的学习进度和知识掌握情况</p>
-            </div>
+          {/* 标题 + 连续学习徽章 */}
+          <div className="mb-2 flex items-start justify-between">
+            <h1 className="text-2xl font-semibold text-stone-800">学习数据</h1>
             {streakDays > 0 && (
               <div className="flex shrink-0 items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2">
                 <span className="text-xl" role="img" aria-label="连续学习">
@@ -384,6 +379,13 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {/* tab 导航：与 quiz 页风格一致 */}
+          <div className="mb-6 flex gap-4 border-b border-stone-200">
+            <span className="border-b-2 border-[#C67A4A] pb-2 text-sm font-medium text-[#C67A4A]">数据总览</span>
+            <Link href="/review" className="pb-2 text-sm text-stone-400 transition hover:text-stone-600">复习计划</Link>
+            <Link href="/memory" className="pb-2 text-sm text-stone-400 transition hover:text-stone-600">学习历程</Link>
+          </div>
+
           {/* 统计卡片 */}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {cards.map((s) => (
@@ -402,30 +404,6 @@ export default function DashboardPage() {
                 </p>
               </div>
             ))}
-          </div>
-
-          {/* 快捷入口 */}
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <Link
-              href="/review"
-              className="group flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 transition hover:border-[#C67A4A]/40"
-            >
-              <span className="text-base text-[#C67A4A]">🔄</span>
-              <div>
-                <p className="text-sm font-medium text-stone-700">复习计划</p>
-                <p className="text-[11px] text-stone-400">遗忘曲线安排</p>
-              </div>
-            </Link>
-            <Link
-              href="/memory"
-              className="group flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 transition hover:border-[#C67A4A]/40"
-            >
-              <span className="text-base text-[#C67A4A]">📖</span>
-              <div>
-                <p className="text-sm font-medium text-stone-700">学习历程</p>
-                <p className="text-[11px] text-stone-400">对话和学习轨迹</p>
-              </div>
-            </Link>
           </div>
 
           {/* 热力图 */}

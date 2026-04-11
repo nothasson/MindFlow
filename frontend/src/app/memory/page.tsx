@@ -91,22 +91,12 @@ export default function MemoryPage() {
     <MainShell>
       <div className="flex h-full flex-col bg-[#EEECE2]">
         <div className="mx-auto w-full max-w-4xl overflow-y-auto px-4 py-12">
-          <div className="mb-2 flex items-center gap-3">
-            <Link
-              href="/dashboard"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 transition hover:bg-stone-200 hover:text-stone-600"
-              title="返回学习数据"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 12H5" />
-                <path d="M12 19l-7-7 7-7" />
-              </svg>
-            </Link>
-            <h1 className="text-2xl font-semibold text-stone-800">学习历程</h1>
+          <h1 className="mb-1 text-2xl font-semibold text-stone-800">学习数据</h1>
+          <div className="mb-6 flex gap-4 border-b border-stone-200">
+            <Link href="/dashboard" className="pb-2 text-sm text-stone-400 transition hover:text-stone-600">数据总览</Link>
+            <Link href="/review" className="pb-2 text-sm text-stone-400 transition hover:text-stone-600">复习计划</Link>
+            <span className="border-b-2 border-[#C67A4A] pb-2 text-sm font-medium text-[#C67A4A]">学习历程</span>
           </div>
-          <p className="mb-8 text-sm text-stone-500">
-            回顾你的学习轨迹，快速继续未完成的对话。
-          </p>
 
           {/* 知识掌握进展 */}
           <div className="mb-6 rounded-2xl border border-stone-200 bg-white p-6">
