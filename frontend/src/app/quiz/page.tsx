@@ -53,8 +53,20 @@ const ERROR_TYPE_LABELS: Record<string, string> = {
 
 // 将题目按 "参考思路" 分割为问题和答案两部分（Anki 正反面）
 function splitQuestionAndAnswer(text: string): { question: string; answer: string } {
-  const markers = ["**参考思路**", "参考思路：", "**参考思路：**"];
-  for (const marker of markers) {
+  // 优先按"参考思路"分割：正面=题目，反面=参考思路+正确答案
+  const hintMarkers = ["**参考思路**", "参考思路：", "**参考思路：**"];
+  for (const marker of hintMarkers) {
+    const idx = text.indexOf(marker);
+    if (idx > 0) {
+      return {
+        question: text.slice(0, idx).trim(),
+        answer: text.slice(idx).trim(),
+      };
+    }
+  }
+  // 备选：按"正确答案"分割
+  const ansMarkers = ["**正确答案**", "正确答案：", "**正确答案：**"];
+  for (const marker of ansMarkers) {
     const idx = text.indexOf(marker);
     if (idx > 0) {
       return {
