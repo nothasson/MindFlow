@@ -3,6 +3,9 @@ FROM node:20-alpine AS dev
 
 WORKDIR /app
 
+# 腾讯云镜像加速
+RUN npm config set registry https://mirrors.cloud.tencent.com/npm/
+
 COPY package.json package-lock.json* ./
 RUN npm install
 
@@ -16,8 +19,12 @@ CMD ["npm", "run", "dev"]
 FROM node:20-alpine AS builder
 
 WORKDIR /app
+
+# 腾讯云镜像加速
+RUN npm config set registry https://mirrors.cloud.tencent.com/npm/
+
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install
 COPY . .
 
 ARG NEXT_PUBLIC_API_URL

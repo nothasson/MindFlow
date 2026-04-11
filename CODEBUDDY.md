@@ -103,6 +103,15 @@ cd /root/mindflow-deploy && docker compose -f docker-compose.yml up -d
 # docker compose -f docker-compose.yml -f docker-compose.override.yml up -d  # override 会覆盖镜像
 ```
 
+### 10. Dockerfile 内必须使用腾讯云镜像源
+
+Lighthouse 服务器在腾讯云内网，访问国外源极慢。**所有 Dockerfile 必须配置腾讯云镜像源**：
+- **Debian/Ubuntu (apt)**：`sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources`
+- **Alpine (apk)**：`sed -i 's/dl-cdn.alpinelinux.org/mirrors.cloud.tencent.com/g' /etc/apk/repositories`
+- **Go (GOPROXY)**：`ENV GOPROXY=https://goproxy.cn,direct`
+- **npm**：`RUN npm config set registry https://mirrors.cloud.tencent.com/npm/`
+- **pip**：`pip install -i https://mirrors.cloud.tencent.com/pypi/simple`
+
 ## 常用命令
 
 ```bash
