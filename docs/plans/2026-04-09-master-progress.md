@@ -144,8 +144,8 @@
 - [x] LLM 评估体系（异步质量评分 + 统计 API）
 - [x] 性能优化（晨间简报 30 分钟缓存 + 仪表盘 5 分钟缓存）
 - [ ] Android 原生客户端（Kotlin/Jetpack Compose，复用后端 API）
-- [ ] E2E 测试（Playwright 端到端）
-- [ ] 配置一致性修复（LLM_MODEL 默认值统一、CORS 链路补齐）
+- [x] E2E 测试（Playwright — 对话/资料/测验三场景）
+- [x] 配置一致性修复（LLM_MODEL 统一、CORS 补齐、Provider 加 JWT）
 
 ### 已知待优化（Review 产出的技术债务）
 
