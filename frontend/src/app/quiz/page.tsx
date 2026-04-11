@@ -244,7 +244,15 @@ export default function QuizPage() {
     <MainShell>
       <div className="flex h-full flex-col bg-[#EEECE2]">
         <div className="mx-auto w-full max-w-3xl overflow-y-auto px-4 py-12">
-          <h1 className="mb-2 text-2xl font-semibold text-stone-800">知识测验</h1>
+          <div className="mb-4 flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-stone-800">测验</h1>
+            <Link
+              href="/wrongbook"
+              className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs text-stone-600 transition hover:bg-stone-100"
+            >
+              错题本
+            </Link>
+          </div>
 
           {/* 对话考察模式 */}
           {convMode ? (

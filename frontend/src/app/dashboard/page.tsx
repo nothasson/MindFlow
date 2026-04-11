@@ -355,15 +355,20 @@ export default function DashboardPage() {
     <MainShell>
       <div className="flex h-full flex-col bg-[#EEECE2]">
         <div className="mx-auto w-full max-w-4xl overflow-y-auto px-4 py-12">
-          {/* 标题 + 连续学习徽章 */}
+          {/* 标题 + 快捷入口 + 连续学习徽章 */}
           <div className="mb-8 flex items-start justify-between">
             <div>
               <h1 className="mb-2 text-2xl font-semibold text-stone-800">
-                学习仪表盘
+                学习数据
               </h1>
-              <p className="text-sm text-stone-500">
-                整体学习进度和数据分析。
-              </p>
+              <div className="flex gap-2">
+                <Link href="/review" className="rounded-lg border border-stone-200 px-3 py-1 text-xs text-stone-600 transition hover:bg-stone-100">
+                  复习计划
+                </Link>
+                <Link href="/memory" className="rounded-lg border border-stone-200 px-3 py-1 text-xs text-stone-600 transition hover:bg-stone-100">
+                  学习历程
+                </Link>
+              </div>
             </div>
             {streakDays > 0 && (
               <div className="flex shrink-0 items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2">
