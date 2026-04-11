@@ -602,10 +602,10 @@ docker compose logs -f backend
 ```bash
 # ===== LLM 配置 =====
 LLM_API_KEY=your-api-key-here          # 必填，硅基流动或其他 OpenAI 兼容服务的 API Key
-LLM_BASE_URL=https://api.siliconflow.cn/v1  # LLM API 地址
-LLM_MODEL=Pro/MiniMaxAI/MiniMax-M2.5   # 默认模型
-CODEX_MODEL=gpt-5.4                     # Codex 备选模型
-CORS_ORIGINS=http://localhost:3000      # 前端跨域地址（多个用逗号分隔）
+LLM_BASE_URL=https://api.siliconflow.cn/v1  # LLM API 地址（默认硅基流动）
+LLM_MODEL=Pro/zai-org/GLM-5.1          # 默认模型（推荐 GLM-5.1 成本低）
+CODEX_MODEL=gpt-5.4                     # Codex 备选模型（可选）
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000  # 前端跨域地址（多个用逗号分隔）
 
 # ===== PostgreSQL =====
 POSTGRES_USER=mindflow                  # 数据库用户名
@@ -625,6 +625,76 @@ BACKEND_PORT=8080                       # Go 后端端口
 AI_SERVICE_PORT=8000                    # Python AI 微服务端口
 FRONTEND_PORT=3000                      # Next.js 前端端口
 ```
+
+### LLM Provider 配置
+
+MindFlow 支持多种 LLM Provider，默认使用硅基流动（SiliconFlow）。
+
+#### 支持的 Provider
+
+| Provider | 默认模型 | 说明 |
+|----------|---------|------|
+| 硅基流动 (SiliconFlow) | Pro/zai-org/GLM-5.1 | **推荐** - 成本低，适合单用户/自部署 |
+| Codex | gpt-5.4 | 可选 - 需要 Codex API Token |
+| OpenAI | gpt-4o | 需修改配置，支持所有 OpenAI 兼容服务 |
+
+#### 切换 Provider
+
+Provider 在**后端启动时**由环境变量确定，运行时**无法切换**（出于安全考虑）。要切换 Provider：
+
+**方式 1：修改环境变量（推荐）**
+
+编辑 `.env` 文件：
+
+```bash
+# 使用硅基流动（默认）
+LLM_BASE_URL=https://api.siliconflow.cn/v1
+LLM_MODEL=Pro/zai-org/GLM-5.1
+LLM_API_KEY=your-siliconflow-key
+
+# 或使用 OpenAI
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o
+LLM_API_KEY=your-openai-key
+```
+
+然后重启服务：
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+**方式 2：运行时 env 变量**
+
+```bash
+LLM_BASE_URL=https://api.openai.com/v1 \
+LLM_MODEL=gpt-4o \
+LLM_API_KEY=your-openai-key \
+docker compose up -d
+```
+
+#### 检查活跃 Provider
+
+```bash
+curl http://localhost:8080/api/settings/provider
+
+# 响应示例：
+{
+  "active": "硅基流动",
+  "providers": ["硅基流动", "Codex"]
+}
+```
+
+#### 费用对比
+
+| Provider | 参考费用 | 适用场景 |
+|----------|---------|---------|
+| 硅基流动 | ¥0.0008/k tokens | ✓ 推荐 - 便宜，本地部署 |
+| OpenAI GPT-4o | $0.003/1k input | 预算充足，需要顶级质量 |
+| Codex | 需商务合作 | 企业用户 |
+
+---
 
 ### Docker 生产模式
 
