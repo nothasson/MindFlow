@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "mermaid": "^11.12.0",
@@ -34,5 +37,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3"
+  },
+  "optionalDependencies": {
+    "@playwright/test": "^1"
   }
 }
