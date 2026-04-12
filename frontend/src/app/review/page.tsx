@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
 import { getReviewDue, getReviewUpcoming, type ReviewItem } from "@/lib/api";
+import { usePromptTemplates } from "@/hooks/usePromptTemplates";
 
 const daysOfWeek = ["一", "二", "三", "四", "五", "六", "日"];
 
@@ -25,6 +26,7 @@ function generateCalendarDays(): { day: number; isToday: boolean }[] {
 export default function ReviewPage() {
   const [dueItems, setDueItems] = useState<ReviewItem[]>([]);
   const [upcomingItems, setUpcomingItems] = useState<ReviewItem[]>([]);
+  const { fill } = usePromptTemplates();
 
   const days = generateCalendarDays();
   const now = new Date();
@@ -93,7 +95,7 @@ export default function ReviewPage() {
                   {dueItems.map((item) => (
                     <a
                       key={item.id}
-                      href={`/?q=${encodeURIComponent("复习一下" + item.concept)}`}
+                      href={`/?q=${encodeURIComponent(fill("review_concept", { concept: item.concept }))}`}
                       className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50 p-4 transition hover:bg-stone-100"
                     >
                       <div>

@@ -9,6 +9,7 @@ import { BrandMark } from "@/components/layout/BrandMark";
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { useChat } from "@/hooks/useChat";
+import { usePromptTemplates } from "@/hooks/usePromptTemplates";
 import { getConversations, getConversation, deleteConversation, getDailyBriefing } from "@/lib/api";
 import type { Conversation, DailyBriefing } from "@/lib/types";
 
@@ -25,6 +26,7 @@ export default function Home() {
     loadConversation,
     newConversation,
   } = useChat();
+  const { fill } = usePromptTemplates();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
@@ -186,7 +188,7 @@ export default function Home() {
                   <button
                     key={`r-${i}`}
                     type="button"
-                    onClick={() => sendMessage(`复习一下「${item.concept}」`)}
+                    onClick={() => sendMessage(fill("review_concept", { concept: item.concept }))}
                     className="rounded-full border border-[#C67A4A]/20 bg-[#C67A4A]/5 px-2.5 py-1 text-xs text-[#C67A4A] transition hover:bg-[#C67A4A]/15"
                   >
                     复习 {item.concept}
@@ -196,7 +198,7 @@ export default function Home() {
                   <button
                     key={`n-${i}`}
                     type="button"
-                    onClick={() => sendMessage(`我想学习「${item.concept}」`)}
+                    onClick={() => sendMessage(fill("learn_new_concept", { concept: item.concept }))}
                     className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs text-stone-600 transition hover:bg-stone-100"
                   >
                     学习 {item.concept}

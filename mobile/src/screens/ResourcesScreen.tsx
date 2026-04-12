@@ -16,9 +16,31 @@ import { File as ExpoFile, Paths } from "expo-file-system";
 import { useNavigation } from "@react-navigation/native";
 import { colors } from "../theme/colors";
 import * as api from "../lib/api";
+import { fillTemplate } from "../lib/api";
 import type { Resource, ResourceUploadResult } from "../lib/types";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/AppNavigator";
+import type { Course } from "../lib/types";
+
+// ===== 工具函数 =====
+
+/** 安全解码 URL 编码的文件名 */
+function decodeName(name: string): string {
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+}
+
+/** 从课程 summary 中提取简短摘要 */
+function extractBrief(summary: string): string {
+  const parts = summary.split(/\n---\n/);
+  const first = parts[0] || summary;
+  const lines = first.split("\n").filter((l: string) => !l.startsWith("## ") && !l.startsWith("### "));
+  const text = lines.join("\n").trim();
+  return text.length > 150 ? text.slice(0, 150) + "..." : text;
+}
 
 // ===== 常量 =====
 
@@ -49,7 +71,17 @@ const FILE_TYPE_ICONS: Record<string, string> = {
 export function ResourcesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  // Tab 状态
+  // Prompt 模板
+  const [templates, setTemplates] = useState<api.PromptTemplates>({});
+
+  useEffect(() => {
+    api.getPromptTemplates().then(setTemplates).catch(() => {});
+  }, []);
+
+  // 顶层模式：上传资料 vs 我的课程
+  const [mode, setMode] = useState<"upload" | "courses">("upload");
+
+  // Tab 状态（内部输入方式切换）
   const [activeTab, setActiveTab] = useState<InputTab>("file");
 
   // 输入状态
@@ -72,6 +104,10 @@ export function ResourcesScreen() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loadingResources, setLoadingResources] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // 课程列表状态
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(false);
 
   // ===== 加载资源列表 =====
 
@@ -197,7 +233,7 @@ export function ResourcesScreen() {
   // ===== 删除资源 =====
 
   const handleDelete = (id: string, filename: string) => {
-    Alert.alert("确认删除", `确定删除「${filename}」吗？此操作不可撤销。`, [
+    Alert.alert("确认删除", `确定删除「${decodeName(filename)}」吗？此操作不可撤销。`, [
       { text: "取消", style: "cancel" },
       {
         text: "删除",
@@ -219,8 +255,8 @@ export function ResourcesScreen() {
   const handleStartLearning = (resourceId: string) => {
     const target = resources.find((item) => item.id === resourceId);
     const prompt = target
-      ? `我想基于资料「${target.filename}」开始学习，请先帮我梳理重点知识点。`
-      : "我想基于刚上传的资料开始学习，请先帮我梳理重点知识点。";
+      ? fillTemplate(templates.learn_resource || "我想基于资料「{{filename}}」开始学习，请先帮我梳理重点知识点。", { filename: decodeName(target.filename) })
+      : templates.learn_resource_default || "我想基于刚上传的资料开始学习，请先帮我梳理重点知识点。";
     navigation.navigate("主导航", {
       screen: "聊天",
       params: { prompt },
@@ -243,12 +279,39 @@ export function ResourcesScreen() {
     }
   };
 
+  // ===== 加载课程列表 =====
+  const fetchCourses = useCallback(async () => {
+    setCoursesLoading(true);
+    try {
+      const data = await api.getCourses();
+      setCourses(data ?? []);
+    } catch { /* 静默 */ }
+    finally { setCoursesLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (mode === "courses") fetchCourses();
+  }, [mode, fetchCourses]);
+
+  // ===== 删除课程 =====
+  const handleDeleteCourse = (id: string, title: string) => {
+    Alert.alert("确认删除", `确定删除课程「${decodeName(title)}」吗？此操作不可撤销。`, [
+      { text: "取消", style: "cancel" },
+      { text: "删除", style: "destructive", onPress: async () => {
+        try {
+          await api.deleteCourse(id);
+          setCourses((prev) => prev.filter((c) => c.id !== id));
+        } catch { Alert.alert("错误", "删除失败"); }
+      }},
+    ]);
+  };
+
   // ===== 过滤资源 =====
 
   const filteredResources = searchQuery.trim()
     ? resources.filter(
         (r) =>
-          r.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          decodeName(r.filename).toLowerCase().includes(searchQuery.toLowerCase()) ||
           r.knowledge_points?.some((kp) =>
             kp.toLowerCase().includes(searchQuery.toLowerCase())
           )
@@ -272,34 +335,42 @@ export function ResourcesScreen() {
       </View>
 
       <FlatList
-        data={filteredResources}
+        data={mode === "upload" ? filteredResources : []}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <>
-            {/* Tab 切换 */}
+            {/* 顶层模式切换：上传资料 / 我的课程 */}
             <View style={styles.tabRow}>
+              <TouchableOpacity
+                style={[styles.tab, mode === "upload" && styles.tabActive]}
+                onPress={() => setMode("upload")}
+              >
+                <Text style={[styles.tabText, mode === "upload" && styles.tabTextActive]}>上传资料</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, mode === "courses" && styles.tabActive]}
+                onPress={() => setMode("courses")}
+              >
+                <Text style={[styles.tabText, mode === "courses" && styles.tabTextActive]}>
+                  我的课程{courses.length > 0 ? ` (${courses.length})` : ""}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* ========== 上传资料模式 ========== */}
+            {mode === "upload" ? (
+            <>
+            {/* 内部输入方式切换 */}
+            <View style={styles.innerTabRow}>
               {TABS.map((tab) => (
                 <TouchableOpacity
                   key={tab.key}
-                  style={[
-                    styles.tab,
-                    activeTab === tab.key && styles.tabActive,
-                  ]}
-                  onPress={() => {
-                    setActiveTab(tab.key);
-                    setUploadResult(null);
-                  }}
+                  style={[styles.innerTab, activeTab === tab.key && styles.innerTabActive]}
+                  onPress={() => { setActiveTab(tab.key); setUploadResult(null); }}
                 >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      activeTab === tab.key && styles.tabTextActive,
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
+                  <Text style={[styles.innerTabText, activeTab === tab.key && styles.innerTabTextActive]}>{tab.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -397,7 +468,7 @@ export function ResourcesScreen() {
                 <View style={styles.resultMeta}>
                   <ResultRow
                     label="文件名"
-                    value={uploadResult.filename}
+                    value={decodeName(uploadResult.filename)}
                   />
                   <ResultRow
                     label="资源 ID"
@@ -492,22 +563,71 @@ export function ResourcesScreen() {
             </View>
 
             {/* 加载/空态 */}
-            {loadingResources && (
+            {loadingResources ? (
               <View style={styles.stateContainer}>
                 <ActivityIndicator size="large" color={colors.brand} />
               </View>
-            )}
-            {!loadingResources && filteredResources.length === 0 && (
+            ) : filteredResources.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyIcon}>📚</Text>
                 <Text style={styles.emptyText}>
-                  {searchQuery.trim()
-                    ? "没有找到匹配的资料"
-                    : "暂无学习资料，上传文件开始学习"}
+                  {searchQuery.trim() ? "没有找到匹配的资料" : "暂无学习资料，上传文件开始学习"}
                 </Text>
+              </View>
+            ) : null}
+          </>
+        ) : (
+          /* ========== 我的课程模式 ========== */
+          <>
+            {coursesLoading ? (
+              <View style={styles.stateContainer}>
+                <ActivityIndicator size="large" color={colors.brand} />
+              </View>
+            ) : courses.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyIcon}>📚</Text>
+                <Text style={styles.emptyText}>还没有课程</Text>
+                <Text style={styles.emptySubText}>上传资料后点击"生成课程"即可创建</Text>
+              </View>
+            ) : (
+              <View style={styles.courseList}>
+                {courses.map((course) => (
+                  <View key={course.id} style={styles.courseCard}>
+                    <View style={styles.courseCardHeader}>
+                      <Text style={styles.courseTitle} numberOfLines={2}>{decodeName(course.title)}</Text>
+                    </View>
+                    {course.summary ? (
+                      <Text style={styles.courseSummary} numberOfLines={3}>{extractBrief(course.summary)}</Text>
+                    ) : null}
+                    <View style={styles.courseMeta}>
+                      <View style={styles.diffTag}>
+                        <Text style={styles.diffTagText}>
+                          {course.difficulty_level === "beginner" ? "初学" : course.difficulty_level === "advanced" ? "进阶" : "专家"}
+                        </Text>
+                      </View>
+                      <Text style={styles.metaText}>{course.section_count} 个章节</Text>
+                    </View>
+                    <View style={styles.courseActions}>
+                      <TouchableOpacity
+                        style={styles.startButton}
+                        onPress={() => navigation.navigate("CourseDetail", { courseId: course.id })}
+                      >
+                        <Text style={styles.startButtonText}>开始学习</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.deleteSmallButton}
+                        onPress={() => handleDeleteCourse(course.id, course.title)}
+                      >
+                        <Text style={styles.deleteSmallButtonText}>删除</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
               </View>
             )}
           </>
+        )}
+        </>
         }
         renderItem={({ item }) => (
           <ResourceCard
@@ -549,7 +669,8 @@ function ResourceCard({
   onGenerateCourse: () => void;
   generatingCourse: boolean;
 }) {
-  const ext = resource.filename.split(".").pop()?.toLowerCase() ?? "";
+  const decoded = decodeName(resource.filename);
+  const ext = decoded.split(".").pop()?.toLowerCase() ?? "";
   const typeIcon = FILE_TYPE_ICONS[ext] ?? "FILE";
 
   return (
@@ -561,7 +682,7 @@ function ResourceCard({
         </View>
         <View style={styles.resourceCardInfo}>
           <Text style={styles.resourceName} numberOfLines={1}>
-            {resource.filename}
+            {decoded}
           </Text>
           <Text style={styles.resourceMeta}>
             {resource.pages > 0 ? `${resource.pages} 页` : ""}
@@ -600,7 +721,10 @@ function ResourceCard({
           disabled={generatingCourse}
         >
           {generatingCourse ? (
-            <ActivityIndicator size="small" color={colors.brand} />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <ActivityIndicator size="small" color={colors.brand} />
+              <Text style={styles.courseButtonText}>生成中...</Text>
+            </View>
           ) : (
             <Text style={styles.courseButtonText}>生成课程</Text>
           )}
@@ -681,6 +805,34 @@ const styles = StyleSheet.create({
     color: colors.stone600,
   },
   tabTextActive: {
+    color: colors.white,
+  },
+
+  // Inner tabs (文件上传/URL导入/文本粘贴)
+  innerTabRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 8,
+  },
+  innerTab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.stone200,
+  },
+  innerTabActive: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  innerTabText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.stone500,
+  },
+  innerTabTextActive: {
     color: colors.white,
   },
 
@@ -973,6 +1125,86 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   deleteButtonText: {
+    color: colors.error,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  // 课程列表样式
+  emptySubText: {
+    fontSize: 13,
+    color: colors.stone400,
+    textAlign: "center",
+  },
+  courseList: {
+    gap: 12,
+  },
+  courseCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.stone200,
+    gap: 10,
+  },
+  courseCardHeader: {
+    gap: 4,
+  },
+  courseTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.stone800,
+  },
+  courseSummary: {
+    fontSize: 13,
+    color: colors.stone500,
+    lineHeight: 20,
+  },
+  courseMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  diffTag: {
+    backgroundColor: colors.stone100,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  diffTagText: {
+    fontSize: 11,
+    color: colors.stone600,
+    fontWeight: "500",
+  },
+  metaText: {
+    fontSize: 12,
+    color: colors.stone400,
+  },
+  courseActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+  },
+  startButton: {
+    flex: 1,
+    backgroundColor: colors.brand,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  startButtonText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  deleteSmallButton: {
+    backgroundColor: colors.stone200,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: "center",
+  },
+  deleteSmallButtonText: {
     color: colors.error,
     fontSize: 13,
     fontWeight: "600",

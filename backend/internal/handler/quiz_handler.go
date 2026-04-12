@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -64,9 +65,13 @@ func (h *QuizHandler) Generate(ctx context.Context, c *app.RequestContext) {
 				return
 			}
 			bloomLevel, _ := agent.BloomLevel(confidence)
+
+			// 解析 LLM 返回的 JSON 数组
+			questions := parseQuizJSON(result, req.Concept)
+
 			c.JSON(http.StatusOK, utils.H{
 				"concept":     req.Concept,
-				"questions":   result,
+				"questions":   questions,
 				"bloom_level": bloomLevel,
 				"confidence":  confidence,
 			})
@@ -87,9 +92,11 @@ func (h *QuizHandler) Generate(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	questions := parseQuizJSON(result, req.Concept)
+
 	c.JSON(http.StatusOK, utils.H{
 		"concept":   req.Concept,
-		"questions": result,
+		"questions": questions,
 	})
 }
 
@@ -308,4 +315,44 @@ func (h *QuizHandler) AnkiRate(ctx context.Context, c *app.RequestContext) {
 	}
 
 	c.JSON(http.StatusOK, utils.H{"ok": true, "concept": req.Concept, "rating": req.Rating})
+}
+
+// quizQuestionItem 结构化题目
+type quizQuestionItem struct {
+	Question string `json:"question"`
+	Hint     string `json:"hint"`
+	Concept  string `json:"concept"`
+}
+
+// parseQuizJSON 解析 LLM 返回的 JSON 数组，提取题目列表
+// 如果 JSON 解析失败，将整段文本作为一道题返回
+func parseQuizJSON(raw string, concept string) []quizQuestionItem {
+	// 找到 JSON 数组部分（兼容 LLM 可能加 ```json 包裹）
+	text := strings.TrimSpace(raw)
+	text = strings.TrimPrefix(text, "```json")
+	text = strings.TrimPrefix(text, "```")
+	text = strings.TrimSuffix(text, "```")
+	text = strings.TrimSpace(text)
+
+	// 找第一个 [ 和最后一个 ]
+	start := strings.Index(text, "[")
+	end := strings.LastIndex(text, "]")
+	if start >= 0 && end > start {
+		text = text[start : end+1]
+	}
+
+	var items []quizQuestionItem
+	if err := json.Unmarshal([]byte(text), &items); err == nil {
+		// 补充 concept
+		for i := range items {
+			items[i].Concept = concept
+		}
+		return items
+	}
+
+	// JSON 解析失败，整段作为一道题
+	if raw != "" {
+		return []quizQuestionItem{{Question: raw, Concept: concept}}
+	}
+	return nil
 }

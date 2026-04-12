@@ -296,6 +296,11 @@ func main() {
 		memoryPageHandler.CalendarStats(ctx, c)
 	})
 
+	// Prompt 模板 API（无需认证，前端/移动端启动时获取）
+	h.GET("/api/prompt-templates", func(ctx context.Context, c *app.RequestContext) {
+		handler.HandleGetPromptTemplates(ctx, c)
+	})
+
 	// 开发测试：回声接口，逐字流式返回用户内容，用于测试 Markdown/Mermaid 渲染和打字机效果
 	h.POST("/api/echo", func(ctx context.Context, c *app.RequestContext) {
 		handler.HandleEcho(ctx, c)

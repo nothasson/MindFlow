@@ -21,6 +21,7 @@ import { WrongbookScreen } from "../screens/WrongbookScreen";
 import { MemoryScreen } from "../screens/MemoryScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
 import { CourseDetailScreen } from "../screens/CourseDetailScreen";
+import { CoursesScreen } from "../screens/CoursesScreen";
 import { DrawerContent } from "../components/DrawerContent";
 import { colors } from "../theme/colors";
 
@@ -41,6 +42,7 @@ export type MainTabParamList = {
 
 export type DrawerParamList = {
   "主导航": NavigatorScreenParams<MainTabParamList> | undefined;
+  "课程库": undefined;
   "学习数据": undefined;
   "知识图谱": undefined;
   "错题本": undefined;
@@ -110,6 +112,7 @@ function MainDrawer() {
       }}
     >
       <Drawer.Screen name="主导航" component={MainTabs} />
+      <Drawer.Screen name="课程库" component={CoursesScreen} />
       <Drawer.Screen name="学习数据" component={DashboardScreen} />
       <Drawer.Screen name="知识图谱" component={KnowledgeScreen} />
       <Drawer.Screen name="错题本" component={WrongbookScreen} />

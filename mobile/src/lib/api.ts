@@ -46,10 +46,11 @@ async function authHeaders(
 
 async function request<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit,
+  timeoutMs: number = 15000
 ): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(`${API_URL}${path}`, {
@@ -64,7 +65,7 @@ async function request<T>(
     }
     return response.json();
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (error instanceof Error && error.name === "AbortError") {
       throw new Error("请求超时，请检查网络或稍后重试");
     }
     if (error instanceof Error && error.message === "Network request failed") {
@@ -303,7 +304,7 @@ export async function importUrlResource(
     method: "POST",
     headers,
     body: JSON.stringify({ url }),
-  });
+  }, 60000); // 网页抓取 + AI 解析，给 60 秒
 }
 
 export async function uploadResource(
@@ -371,15 +372,16 @@ export async function generateQuiz(
   count?: number
 ): Promise<QuizQuestion[]> {
   const headers = await authHeaders({ "Content-Type": "application/json" });
-  const data = await request<{ questions: QuizQuestion[] }>(
+  const data = await request<{ concept: string; questions: QuizQuestion[] }>(
     "/api/quiz/generate",
     {
       method: "POST",
       headers,
-      body: JSON.stringify({ concept, count: count ?? 3 }),
-    }
+      body: JSON.stringify({ concept, count: count ?? 1 }),
+    },
+    60000 // 生成题目需要 LLM，给 60 秒
   );
-  return data.questions;
+  return data.questions || [];
 }
 
 export async function submitQuiz(
@@ -392,7 +394,7 @@ export async function submitQuiz(
     method: "POST",
     headers,
     body: JSON.stringify({ concept, question, answer }),
-  });
+  }, 60000); // LLM 评分，给 60 秒
 }
 
 export async function quizAnkiRate(
@@ -417,7 +419,7 @@ export async function quizConversation(
     method: "POST",
     headers,
     body: JSON.stringify({ concept, message, session_id: sessionId }),
-  });
+  }, 60000); // LLM 对话式考察，给 60 秒
 }
 
 // ===== 错题本 API =====
@@ -561,5 +563,52 @@ export async function generateCourse(
     method: "POST",
     headers,
     body: JSON.stringify(body),
-  });
+  }, 120000); // 课程生成需要 LLM 处理，给 120 秒
+}
+
+// ===== Prompt 模板 API =====
+
+/** Prompt 模板映射，key 为场景名，value 为带 {{变量}} 占位符的模板字符串 */
+export type PromptTemplates = Record<string, string>;
+
+/** 默认 prompt 模板（后端不可用时的 fallback） */
+const DEFAULT_PROMPT_TEMPLATES: PromptTemplates = {
+  learn_resource: "我想基于资料「{{filename}}」开始学习，请先帮我梳理重点知识点。",
+  learn_resource_default: "我想基于刚上传的资料开始学习，请先帮我梳理重点知识点。",
+  learn_concept: "我想学习知识点「{{concept}}」，请帮我深入理解这个概念。",
+  learn_course_section: "我想学习课程「{{course_title}}」的第 {{section_index}} 章「{{section_title}}」。\n\n学习目标：\n{{learning_objectives}}\n\n请用苏格拉底式对话引导我理解这些内容。",
+  learn_course: "我想学习课程「{{course_title}}」，请帮我梳理重点知识点。",
+  learn_course_default: "我想开始课程学习",
+  review_concept: "复习一下「{{concept}}」",
+  learn_new_concept: "我想学习「{{concept}}」",
+  quiz_concept: "请针对「{{concept}}」出一道测试题",
+};
+
+/** 缓存已获取的模板 */
+let _cachedTemplates: PromptTemplates | null = null;
+
+/** 获取 prompt 模板，带缓存和 fallback */
+export async function getPromptTemplates(): Promise<PromptTemplates> {
+  if (_cachedTemplates) return _cachedTemplates;
+  try {
+    const data = await request<{ templates: PromptTemplates }>(
+      "/api/prompt-templates"
+    );
+    _cachedTemplates = data.templates;
+    return _cachedTemplates;
+  } catch {
+    // 后端不可用时使用默认模板
+    return DEFAULT_PROMPT_TEMPLATES;
+  }
+}
+
+/** 用变量填充模板中的 {{变量}} 占位符 */
+export function fillTemplate(
+  template: string,
+  vars: Record<string, string>
+): string {
+  return template.replace(
+    /\{\{(\w+)\}\}/g,
+    (_, key: string) => vars[key] ?? `{{${key}}}`
+  );
 }

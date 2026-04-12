@@ -75,6 +75,19 @@ export interface ResourceUploadResult {
   warning?: string;
 }
 
+export interface Resource {
+  id: string;
+  filename: string;
+  source_type: string;
+  source_url?: string;
+  status: string;
+  pages: number;
+  chunks: number;
+  knowledge_points: string[];
+  summary?: string;
+  created_at: string;
+}
+
 /** 晨间简报相关类型 */
 export interface BriefingItem {
   concept: string;

@@ -153,6 +153,7 @@ export interface ReviewItem {
 export interface QuizQuestion {
   question: string;
   concept: string;
+  hint?: string;
   difficulty?: string;
 }
 

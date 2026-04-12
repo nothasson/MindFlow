@@ -12,6 +12,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { colors } from "../theme/colors";
 import * as api from "../lib/api";
+import { fillTemplate } from "../lib/api";
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import type { Course, CourseSection } from "../lib/types";
 
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -19,6 +21,22 @@ const DIFFICULTY_LABELS: Record<string, string> = {
   intermediate: "进阶",
   advanced: "高级",
 };
+
+/** 安全解码 URL 编码 */
+function decode(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
+/** 从课程 summary 中提取简短摘要（到第一个 --- 分割线或前 300 字） */
+function extractBrief(summary: string): string {
+  // 取 ## 课程摘要 之后到第一个 --- 之间的内容
+  const parts = summary.split(/\n---\n/);
+  const first = parts[0] || summary;
+  // 去掉 Markdown 标题行，只保留正文
+  const lines = first.split("\n").filter(l => !l.startsWith("## ") && !l.startsWith("### "));
+  const text = lines.join("\n").trim();
+  return text.length > 300 ? text.slice(0, 300) + "..." : text;
+}
 
 export function CourseDetailScreen() {
   const navigation = useNavigation<any>();
@@ -28,6 +46,11 @@ export function CourseDetailScreen() {
   const [course, setCourse] = useState<Course | null>(null);
   const [sections, setSections] = useState<CourseSection[]>([]);
   const [expandedIndex, setExpandedIndex] = useState<number>(0);
+  const [templates, setTemplates] = useState<api.PromptTemplates>({});
+
+  useEffect(() => {
+    api.getPromptTemplates().then(setTemplates).catch(() => {});
+  }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,10 +72,18 @@ export function CourseDetailScreen() {
     fetchCourse();
   }, [fetchCourse]);
 
-  const handleStartChat = () => {
-    const prompt = course
-      ? `我想学习课程「${course.title}」，请帮我梳理重点知识点。`
-      : "我想开始课程学习";
+  /** 针对当前展开的章节进入对话学习 */
+  const handleStartSectionChat = (sectionIdx: number) => {
+    if (!course) return;
+    const section = sections[sectionIdx];
+    const tpl = templates.learn_course_section
+      || "我想学习课程「{{course_title}}」的第 {{section_index}} 章「{{section_title}}」。\n\n学习目标：\n{{learning_objectives}}\n\n请用苏格拉底式对话引导我理解这些内容。";
+    const prompt = fillTemplate(tpl, {
+      course_title: decode(course.title),
+      section_index: String(sectionIdx + 1),
+      section_title: decode(section?.title || ""),
+      learning_objectives: section?.learning_objectives || "无",
+    });
     navigation.navigate("主导航", {
       screen: "聊天",
       params: { prompt },
@@ -99,7 +130,7 @@ export function CourseDetailScreen() {
         >
           <Text style={styles.backButtonText}>{"<"}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{course.title}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{decode(course.title)}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -110,7 +141,7 @@ export function CourseDetailScreen() {
         {/* 课程概览 */}
         <View style={styles.overviewCard}>
           <View style={styles.overviewHeader}>
-            <Text style={styles.courseTitle}>{course.title}</Text>
+            <Text style={styles.courseTitle}>{decode(course.title)}</Text>
             <View style={styles.difficultyTag}>
               <Text style={styles.difficultyText}>
                 {DIFFICULTY_LABELS[course.difficulty_level] ?? course.difficulty_level}
@@ -118,7 +149,7 @@ export function CourseDetailScreen() {
             </View>
           </View>
           {course.summary ? (
-            <Text style={styles.courseSummary}>{course.summary}</Text>
+            <Text style={styles.courseBrief}>{extractBrief(course.summary)}</Text>
           ) : null}
           <View style={styles.courseMeta}>
             <Text style={styles.metaText}>
@@ -142,7 +173,7 @@ export function CourseDetailScreen() {
                       <Text style={styles.sectionNumberText}>{idx + 1}</Text>
                     </View>
                     <Text style={styles.sectionTitle} numberOfLines={2}>
-                      {section.title}
+                      {decode(section.title)}
                     </Text>
                   </View>
                   <Text style={styles.expandIcon}>{isExpanded ? "▲" : "▼"}</Text>
@@ -151,30 +182,36 @@ export function CourseDetailScreen() {
                 {isExpanded && (
                   <View style={styles.sectionBody}>
                     {section.summary ? (
-                      <Text style={styles.sectionSummary}>{section.summary}</Text>
+                      <MarkdownRenderer content={section.summary} />
                     ) : null}
 
                     {section.learning_objectives ? (
                       <View style={styles.objectivesBox}>
                         <Text style={styles.objectivesLabel}>学习目标</Text>
-                        <Text style={styles.objectivesText}>
-                          {section.learning_objectives}
-                        </Text>
+                        <MarkdownRenderer content={section.learning_objectives} />
                       </View>
                     ) : null}
 
                     {section.content ? (
-                      <Text style={styles.sectionContent}>{section.content}</Text>
+                      <MarkdownRenderer content={section.content} />
                     ) : null}
 
                     {section.question_prompts ? (
                       <View style={styles.promptsBox}>
                         <Text style={styles.promptsLabel}>思考与讨论</Text>
-                        <Text style={styles.promptsText}>
-                          {section.question_prompts}
-                        </Text>
+                        <MarkdownRenderer content={section.question_prompts} />
                       </View>
                     ) : null}
+
+                    {/* 本章对话学习按钮 */}
+                    <TouchableOpacity
+                      style={styles.sectionChatButton}
+                      onPress={() => handleStartSectionChat(idx)}
+                    >
+                      <Text style={styles.sectionChatButtonText}>
+                        对话学习本章：{decode(section.title)}
+                      </Text>
+                    </TouchableOpacity>
 
                     {/* 章节导航 */}
                     <View style={styles.sectionNav}>
@@ -213,11 +250,6 @@ export function CourseDetailScreen() {
             <Text style={styles.emptyText}>课程暂无章节内容</Text>
           </View>
         )}
-
-        {/* 进入对话学习 */}
-        <TouchableOpacity style={styles.chatButton} onPress={handleStartChat}>
-          <Text style={styles.chatButtonText}>进入对话学习</Text>
-        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -303,6 +335,11 @@ const styles = StyleSheet.create({
     color: colors.stone800,
     lineHeight: 26,
   },
+  courseBrief: {
+    fontSize: 14,
+    color: colors.stone600,
+    lineHeight: 20,
+  },
   difficultyTag: {
     backgroundColor: "rgba(198, 122, 74, 0.12)",
     borderRadius: 8,
@@ -313,11 +350,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: colors.brand,
-  },
-  courseSummary: {
-    fontSize: 14,
-    color: colors.stone600,
-    lineHeight: 20,
   },
   courseMeta: {
     flexDirection: "row",
@@ -377,11 +409,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 12,
   },
-  sectionSummary: {
-    fontSize: 13,
-    color: colors.stone500,
-    lineHeight: 19,
-  },
   objectivesBox: {
     backgroundColor: colors.stone50,
     borderRadius: 12,
@@ -392,16 +419,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: colors.stone700,
-  },
-  objectivesText: {
-    fontSize: 13,
-    color: colors.stone600,
-    lineHeight: 19,
-  },
-  sectionContent: {
-    fontSize: 14,
-    color: colors.stone800,
-    lineHeight: 22,
   },
   promptsBox: {
     backgroundColor: "rgba(198, 122, 74, 0.06)",
@@ -416,11 +433,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.brand,
   },
-  promptsText: {
-    fontSize: 13,
-    color: colors.stone700,
-    lineHeight: 19,
+
+  // 本章对话学习按钮
+  sectionChatButton: {
+    backgroundColor: colors.brand,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    marginTop: 4,
   },
+  sectionChatButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
   sectionNav: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -462,18 +490,5 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: colors.stone500,
-  },
-
-  // Chat button
-  chatButton: {
-    backgroundColor: colors.brand,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  chatButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: "700",
   },
 });

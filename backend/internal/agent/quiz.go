@@ -120,19 +120,20 @@ Bloom 认知层级：%s
 1. %s
 2. 出 1-3 道题，所有题目必须符合上述认知层级
 3. 使用中文
-4. 题目格式：
+4. **必须严格按以下 JSON 数组格式输出，不要输出任何其他内容**：
 
-### 题目 1（Bloom 层级：%s）
+[
+  {
+    "question": "题目内容",
+    "hint": "参考思路（不给答案，给解题方向提示）"
+  }
+]
 
-[题目内容]
-
-**参考思路**：[不给答案，给解题方向提示]
-
-注意：不要直接给答案，只给思路提示。`, concept, confidence*100, bloomLevel, bloomDesc, bloomLevel)
+只输出 JSON 数组，不要 markdown、不要解释。`, concept, confidence*100, bloomLevel, bloomDesc)
 
 	messages := []*schema.Message{
 		schema.SystemMessage(WrapPromptWithDefense(bloomPrompt)),
-		schema.UserMessage("请针对「" + concept + "」出题"),
+		schema.UserMessage("请针对「" + concept + "」出题，严格输出 JSON 数组"),
 	}
 
 	resp, err := q.chatModel.Generate(ctx, messages)

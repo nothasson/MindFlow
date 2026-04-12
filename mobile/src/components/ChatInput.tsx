@@ -1,11 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 import { Svg, Path } from "react-native-svg";
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
 import { colors } from "../theme/colors";
 
 interface ChatInputProps {
@@ -17,6 +22,7 @@ interface ChatInputProps {
 
 export function ChatInput({ onSend, disabled, onStop, isStreaming }: ChatInputProps) {
   const [text, setText] = useState("");
+  const [listening, setListening] = useState(false);
 
   const handleSend = () => {
     const trimmed = text.trim();
@@ -24,6 +30,40 @@ export function ChatInput({ onSend, disabled, onStop, isStreaming }: ChatInputPr
     onSend(trimmed);
     setText("");
   };
+
+  // ===== 语音识别事件 =====
+  useSpeechRecognitionEvent("start", () => setListening(true));
+  useSpeechRecognitionEvent("end", () => setListening(false));
+  useSpeechRecognitionEvent("result", (event) => {
+    const transcript = event.results[0]?.transcript ?? "";
+    if (transcript) {
+      setText(transcript);
+    }
+  });
+  useSpeechRecognitionEvent("error", (event) => {
+    setListening(false);
+    console.warn("语音识别错误:", event.error);
+  });
+
+  const toggleListening = useCallback(async () => {
+    if (listening) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+
+    // 请求权限
+    const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!granted) {
+      Alert.alert("权限不足", "请在系统设置中允许麦克风权限");
+      return;
+    }
+
+    ExpoSpeechRecognitionModule.start({
+      lang: "zh-CN",
+      interimResults: true,
+      continuous: true,
+    });
+  }, [listening]);
 
   return (
     <View style={styles.container}>
@@ -40,6 +80,18 @@ export function ChatInput({ onSend, disabled, onStop, isStreaming }: ChatInputPr
           onSubmitEditing={handleSend}
           blurOnSubmit={false}
         />
+        {/* 语音输入按钮 */}
+        <TouchableOpacity
+          style={[styles.micButton, listening && styles.micButtonActive]}
+          onPress={toggleListening}
+          activeOpacity={0.7}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill={listening ? colors.white : colors.stone500}>
+            <Path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" />
+            <Path d="M17 11a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2Z" />
+          </Svg>
+        </TouchableOpacity>
+        {/* 发送 / 停止按钮 */}
         <TouchableOpacity
           style={[
             styles.sendButton,
@@ -94,6 +146,17 @@ const styles = StyleSheet.create({
     color: colors.stone800,
     maxHeight: 120,
     paddingVertical: 8,
+  },
+  micButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.stone100,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  micButtonActive: {
+    backgroundColor: "#ef4444",
   },
   sendButton: {
     width: 36,

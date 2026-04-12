@@ -5,6 +5,22 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 
 import { getCourse, type Course, type CourseSection } from "@/lib/api";
+import { usePromptTemplates } from "@/hooks/usePromptTemplates";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
+
+/** 安全解码 URL 编码 */
+function decode(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
+/** 从课程 summary 中提取简短摘要 */
+function extractBrief(summary: string): string {
+  const parts = summary.split(/\n---\n/);
+  const first = parts[0] || summary;
+  const lines = first.split("\n").filter((l: string) => !l.startsWith("## ") && !l.startsWith("### "));
+  const text = lines.join("\n").trim();
+  return text.length > 300 ? text.slice(0, 300) + "..." : text;
+}
 
 export default function CoursePage() {
   const params = useParams();
@@ -15,6 +31,7 @@ export default function CoursePage() {
   const [activeSection, setActiveSection] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { fill } = usePromptTemplates();
 
   const fetchCourse = useCallback(async () => {
     if (!courseId) return;
@@ -56,7 +73,7 @@ export default function CoursePage() {
     <div className="flex h-full bg-[#EEECE2]">
       {/* 章节导航 */}
       <aside className="w-64 shrink-0 overflow-y-auto border-r border-stone-200 bg-[#EEECE2] p-4">
-        <h2 className="mb-4 text-lg font-semibold text-stone-800">{course.title}</h2>
+        <h2 className="mb-4 text-lg font-semibold text-stone-800">{decode(course.title)}</h2>
         <p className="mb-4 text-xs text-stone-400">
           {course.difficulty_level === "beginner" ? "初学" : course.difficulty_level === "advanced" ? "进阶" : "专家"}
         </p>
@@ -72,7 +89,7 @@ export default function CoursePage() {
                   : "text-stone-600 hover:bg-stone-200/50"
               }`}
             >
-              第 {idx + 1} 章：{section.title}
+              第 {idx + 1} 章：{decode(section.title)}
             </button>
           ))}
         </div>
@@ -83,33 +100,35 @@ export default function CoursePage() {
         {currentSection ? (
           <div className="mx-auto max-w-3xl">
             <h1 className="mb-2 text-2xl font-semibold text-stone-800">
-              第 {activeSection + 1} 章：{currentSection.title}
+              第 {activeSection + 1} 章：{decode(currentSection.title)}
             </h1>
 
             {currentSection.summary ? (
-              <p className="mb-6 text-sm text-stone-500">{currentSection.summary}</p>
+              <div className="mb-6 text-sm text-stone-500">
+                <MarkdownRenderer content={currentSection.summary} />
+              </div>
             ) : null}
 
             {currentSection.learning_objectives ? (
               <div className="mb-6 rounded-2xl border border-stone-200 bg-white p-5">
                 <h3 className="mb-2 text-sm font-semibold text-stone-700">学习目标</h3>
-                <div className="text-sm text-stone-600 whitespace-pre-wrap">
-                  {currentSection.learning_objectives}
+                <div className="text-sm text-stone-600">
+                  <MarkdownRenderer content={currentSection.learning_objectives} />
                 </div>
               </div>
             ) : null}
 
             {currentSection.content ? (
-              <div className="mb-6 text-[15px] leading-7 text-stone-800 whitespace-pre-wrap">
-                {currentSection.content}
+              <div className="mb-6 text-[15px] leading-7 text-stone-800">
+                <MarkdownRenderer content={currentSection.content} />
               </div>
             ) : null}
 
             {currentSection.question_prompts ? (
               <div className="mb-6 rounded-2xl border border-[#C67A4A]/20 bg-[#C67A4A]/5 p-5">
                 <h3 className="mb-2 text-sm font-semibold text-[#C67A4A]">思考与讨论</h3>
-                <div className="text-sm text-stone-700 whitespace-pre-wrap">
-                  {currentSection.question_prompts}
+                <div className="text-sm text-stone-700">
+                  <MarkdownRenderer content={currentSection.question_prompts} />
                 </div>
               </div>
             ) : null}
@@ -134,10 +153,10 @@ export default function CoursePage() {
                 </button>
               ) : null}
               <Link
-                href="/"
-                className="rounded-lg border border-[#C67A4A] px-4 py-2 text-sm text-[#C67A4A] transition hover:bg-[#C67A4A]/10"
+                href={`/?q=${encodeURIComponent(fill("learn_course_section", { course_title: decode(course.title), section_index: String(activeSection + 1), section_title: decode(currentSection.title), learning_objectives: currentSection.learning_objectives || '无' }))}`}
+                className="rounded-lg bg-[#C67A4A] px-4 py-2 text-sm text-white transition hover:bg-[#b06a3a]"
               >
-                进入对话学习
+                对话学习本章
               </Link>
             </div>
           </div>

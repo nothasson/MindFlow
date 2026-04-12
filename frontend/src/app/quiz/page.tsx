@@ -78,7 +78,7 @@ export default function QuizPage() {
 
   const [concept, setConcept] = useState(urlConcept);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [questions, setQuestions] = useState<string[]>([]);
+  const [questions, setQuestions] = useState<{ question: string; hint?: string; concept?: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<{ score: number; is_correct: boolean; explanation?: string } | null>(null);
@@ -190,11 +190,15 @@ export default function QuizPage() {
     fetchWrongBook();
   };
 
-  // 解析 LLM 返回的多题文本为单题数组
-  const parseQuestions = (text: string): string[] => {
-    const parts = text.split(/(?=###\s*题目|(?:^|\n)\*\*题目)/);
-    const filtered = parts.filter((p) => p.trim().length > 20);
-    return filtered.length > 0 ? filtered : [text];
+  // 解析题目（后端现在返回结构化数组）
+  const parseQuestions = (qs: any): { question: string; hint?: string; concept?: string }[] => {
+    if (Array.isArray(qs)) return qs;
+    // 兼容旧的字符串格式
+    if (typeof qs === "string") {
+      const parts = qs.split(/(?=###\s*题目|(?:^|\n)\*\*题目)/).filter((p: string) => p.trim().length > 20);
+      return (parts.length > 0 ? parts : [qs]).map((q: string) => ({ question: q }));
+    }
+    return [];
   };
 
   const generateQuiz = useCallback(async () => {
@@ -222,7 +226,7 @@ export default function QuizPage() {
     try {
       const data = await submitQuiz({
         concept,
-        question: questions[currentIndex]?.slice(0, 500) ?? "",
+        question: questions[currentIndex]?.question?.slice(0, 500) ?? "",
         answer,
       });
       setResult(data);
@@ -775,19 +779,19 @@ export default function QuizPage() {
                       <div>
                         <p className="mb-3 text-center text-xs text-stone-400">想一想答案，然后点击翻转</p>
                         <div className="text-left">
-                          <MarkdownRenderer content={splitQuestionAndAnswer(questions[ankiIndex] ?? "").question} />
+                          <MarkdownRenderer content={splitQuestionAndAnswer(questions[ankiIndex]?.question ?? "").question} />
                         </div>
                       </div>
                     ) : (
                       <div>
                         <p className="mb-3 text-center text-xs text-[#6b8e6b]">参考答案</p>
                         <div className="text-left">
-                          <MarkdownRenderer content={splitQuestionAndAnswer(questions[ankiIndex] ?? "").answer} />
+                          <MarkdownRenderer content={splitQuestionAndAnswer(questions[ankiIndex]?.question ?? "").answer} />
                         </div>
                         <hr className="my-4 border-stone-200" />
                         <p className="text-center text-xs text-stone-400">原题回顾</p>
                         <div className="mt-2 text-left opacity-70">
-                          <MarkdownRenderer content={splitQuestionAndAnswer(questions[ankiIndex] ?? "").question} />
+                          <MarkdownRenderer content={splitQuestionAndAnswer(questions[ankiIndex]?.question ?? "").question} />
                         </div>
                       </div>
                     )}
@@ -848,7 +852,7 @@ export default function QuizPage() {
 
                   {/* 当前题目 */}
                   <div className="rounded-2xl border border-stone-200 bg-white p-6">
-                    <MarkdownRenderer content={questions[currentIndex] ?? ""} />
+                    <MarkdownRenderer content={questions[currentIndex]?.question ?? ""} />
                   </div>
 
                   {/* 作答 / 结果 */}

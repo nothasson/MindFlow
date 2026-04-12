@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, Conversation, DailyBriefing, KnowledgeGraph, KnowledgeSourceLink, Message, ResourceUploadResult, SSEEvent } from "@/lib/types";
+import type { ChatRequest, ChatResponse, Conversation, DailyBriefing, KnowledgeGraph, KnowledgeSourceLink, Message, Resource, ResourceUploadResult, SSEEvent } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -319,6 +319,25 @@ export async function uploadResource(file: File): Promise<ResourceUploadResult> 
   return response.json();
 }
 
+/** 获取已上传资料列表 */
+export async function getResources(): Promise<Resource[]> {
+  const response = await fetch(`${API_URL}/api/resources`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error("获取资料列表失败");
+  const data = (await response.json()) as { resources: Resource[] };
+  return data.resources || [];
+}
+
+/** 删除资料 */
+export async function deleteResource(id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/resources/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error("删除失败");
+}
+
 /** 获取今日学习简报 */
 export async function getDailyBriefing(): Promise<DailyBriefing> {
   const response = await fetch(`${API_URL}/api/daily-briefing`, {
@@ -537,8 +556,15 @@ export async function getReviewUpcoming(): Promise<{ items: ReviewItem[] }> {
 
 // ===== 测验 API =====
 
+/** 题目结构 */
+export interface QuizQuestion {
+  question: string;
+  concept: string;
+  hint?: string;
+}
+
 /** 生成测验题目 */
-export async function generateQuiz(data: { concept: string }): Promise<{ questions: string; concept?: string }> {
+export async function generateQuiz(data: { concept: string }): Promise<{ questions: QuizQuestion[]; concept?: string }> {
   const response = await fetch(`${API_URL}/api/quiz/generate`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -729,4 +755,45 @@ export interface CourseSection {
   learning_objectives: string;
   question_prompts: string;
   created_at: string;
+}
+
+// ===== Prompt 模板 API =====
+
+/** Prompt 模板映射，key 为场景名，value 为带 {{变量}} 占位符的模板字符串 */
+export type PromptTemplates = Record<string, string>;
+
+/** 默认 prompt 模板（后端不可用时的 fallback） */
+const DEFAULT_PROMPT_TEMPLATES: PromptTemplates = {
+  learn_resource: "我想基于资料「{{filename}}」开始学习，请先帮我梳理重点知识点。",
+  learn_resource_default: "我想基于刚上传的资料开始学习，请先帮我梳理重点知识点。",
+  learn_concept: "我想学习知识点「{{concept}}」，请帮我深入理解这个概念。",
+  learn_course_section: "我想学习课程「{{course_title}}」的第 {{section_index}} 章「{{section_title}}」。\n\n学习目标：\n{{learning_objectives}}\n\n请用苏格拉底式对话引导我理解这些内容。",
+  learn_course: "我想学习课程「{{course_title}}」，请帮我梳理重点知识点。",
+  learn_course_default: "我想开始课程学习",
+  review_concept: "复习一下「{{concept}}」",
+  learn_new_concept: "我想学习「{{concept}}」",
+  quiz_concept: "请针对「{{concept}}」出一道测试题",
+};
+
+/** 缓存已获取的模板 */
+let _cachedTemplates: PromptTemplates | null = null;
+
+/** 获取 prompt 模板，带缓存和 fallback */
+export async function getPromptTemplates(): Promise<PromptTemplates> {
+  if (_cachedTemplates) return _cachedTemplates;
+  try {
+    const response = await fetch(`${API_URL}/api/prompt-templates`);
+    if (!response.ok) throw new Error("获取模板失败");
+    const data = (await response.json()) as { templates: PromptTemplates };
+    _cachedTemplates = data.templates;
+    return _cachedTemplates;
+  } catch {
+    // 后端不可用时使用默认模板
+    return DEFAULT_PROMPT_TEMPLATES;
+  }
+}
+
+/** 用变量填充模板中的 {{变量}} 占位符 */
+export function fillTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
 }

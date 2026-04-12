@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { MainShell } from "@/components/layout/MainShell";
 import { getKnowledgeGraph, getKnowledgeSources, deleteConcept } from "@/lib/api";
 import type { KnowledgeNode, KnowledgeEdge, KnowledgeSourceLink } from "@/lib/types";
+import { usePromptTemplates } from "@/hooks/usePromptTemplates";
 
 interface SimNode extends KnowledgeNode {
   x: number;
@@ -51,8 +52,91 @@ function wrapText(text: string, maxChars: number): string[] {
   return lines;
 }
 
+/**
+ * 基于连通分量的智能初始布局：
+ * 将节点按连通分量分组，每组放在画布的不同区域，
+ * 组内节点围绕组中心分布，避免一开始就完全随机
+ */
+function computeInitialPositions(
+  nodes: KnowledgeNode[],
+  edges: KnowledgeEdge[],
+  w: number,
+  h: number
+): { x: number; y: number }[] {
+  // 1. 建立邻接表
+  const adj = new Map<string, Set<string>>();
+  for (const n of nodes) adj.set(n.concept, new Set());
+  for (const e of edges) {
+    adj.get(e.from)?.add(e.to);
+    adj.get(e.to)?.add(e.from);
+  }
+
+  // 2. BFS 找连通分量
+  const visited = new Set<string>();
+  const components: string[][] = [];
+  for (const n of nodes) {
+    if (visited.has(n.concept)) continue;
+    const component: string[] = [];
+    const queue = [n.concept];
+    visited.add(n.concept);
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      component.push(curr);
+      for (const neighbor of adj.get(curr) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+    components.push(component);
+  }
+
+  // 3. 排序：大分量在中心
+  components.sort((a, b) => b.length - a.length);
+
+  // 4. 分配每个分量的中心位置
+  const cx = w / 2;
+  const cy = h / 2;
+  const positions = new Map<string, { x: number; y: number }>();
+  const numComps = components.length;
+
+  if (numComps === 1) {
+    // 单个分量：围绕画布中心圆形分布
+    const comp = components[0];
+    const radius = Math.min(w, h) * 0.35;
+    for (let i = 0; i < comp.length; i++) {
+      const angle = (2 * Math.PI * i) / comp.length;
+      positions.set(comp[i], {
+        x: cx + radius * Math.cos(angle) + (Math.random() - 0.5) * 30,
+        y: cy + radius * Math.sin(angle) + (Math.random() - 0.5) * 30,
+      });
+    }
+  } else {
+    // 多个分量：每个分量占一块区域
+    const groupRadius = Math.min(w, h) * 0.3;
+    for (let gi = 0; gi < numComps; gi++) {
+      const comp = components[gi];
+      const groupAngle = (2 * Math.PI * gi) / numComps;
+      const gcx = cx + (gi === 0 ? 0 : groupRadius * Math.cos(groupAngle));
+      const gcy = cy + (gi === 0 ? 0 : groupRadius * Math.sin(groupAngle));
+      const innerRadius = Math.max(60, Math.sqrt(comp.length) * 40);
+      for (let i = 0; i < comp.length; i++) {
+        const angle = (2 * Math.PI * i) / comp.length;
+        positions.set(comp[i], {
+          x: gcx + innerRadius * Math.cos(angle) + (Math.random() - 0.5) * 20,
+          y: gcy + innerRadius * Math.sin(angle) + (Math.random() - 0.5) * 20,
+        });
+      }
+    }
+  }
+
+  return nodes.map((n) => positions.get(n.concept) ?? { x: cx, y: cy });
+}
+
 export default function KnowledgePage() {
   const router = useRouter();
+  const { fill } = usePromptTemplates();
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
   const [edges, setEdges] = useState<KnowledgeEdge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,19 +184,20 @@ export default function KnowledgePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // 初始化力模拟节点
+  // 初始化力模拟节点（使用智能布局）
   useEffect(() => {
     const canvas = canvasRef.current;
     const w = canvas?.width ?? 800;
     const h = canvas?.height ?? 600;
-    simNodesRef.current = nodes.map((n) => ({
+    const initPositions = computeInitialPositions(nodes, edges, w, h);
+    simNodesRef.current = nodes.map((n, i) => ({
       ...n,
-      x: w / 2 + (Math.random() - 0.5) * 300,
-      y: h / 2 + (Math.random() - 0.5) * 300,
+      x: initPositions[i].x,
+      y: initPositions[i].y,
       vx: 0,
       vy: 0,
     }));
-  }, [nodes]);
+  }, [nodes, edges]);
 
   // 力模拟 tick — 被拖拽的节点跳过位置更新
   const tick = useCallback(() => {
@@ -129,15 +214,31 @@ export default function KnowledgePage() {
     const indexMap = new Map<string, number>();
     simNodes.forEach((n, i) => indexMap.set(n.concept, i));
 
-    // 斥力
+    // 节点数自适应参数
+    const nodeCount = simNodes.length;
+    const repulsionStrength = nodeCount > 50 ? 8000 : nodeCount > 20 ? 5000 : 3000;
+    const idealEdgeLen = nodeCount > 50 ? 220 : nodeCount > 20 ? 180 : 150;
+    const springK = 0.008;
+    const centerGravity = 0.003;
+
+    // 斥力 — 增大斥力避免节点重叠
     for (let i = 0; i < simNodes.length; i++) {
       for (let j = i + 1; j < simNodes.length; j++) {
         const dx = simNodes[j].x - simNodes[i].x;
         const dy = simNodes[j].y - simNodes[i].y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = 2000 / (dist * dist);
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
+        // 考虑节点半径的最小安全距离
+        const ri = nodeRadius(simNodes[i].concept, edges);
+        const rj = nodeRadius(simNodes[j].concept, edges);
+        const minDist = ri + rj + 20;
+        const effectiveDist = Math.max(dist, 1);
+        let force = repulsionStrength / (effectiveDist * effectiveDist);
+        // 如果节点距离小于安全距离，大幅增加排斥力
+        if (dist < minDist) {
+          force += (minDist - dist) * 0.5;
+        }
+        const fx = (dx / effectiveDist) * force;
+        const fy = (dy / effectiveDist) * force;
         simNodes[i].vx -= fx;
         simNodes[i].vy -= fy;
         simNodes[j].vx += fx;
@@ -145,7 +246,7 @@ export default function KnowledgePage() {
       }
     }
 
-    // 引力（沿边）
+    // 引力（沿边）— 目标距离更大
     for (const edge of edges) {
       const si = indexMap.get(edge.from);
       const ti = indexMap.get(edge.to);
@@ -153,7 +254,7 @@ export default function KnowledgePage() {
       const dx = simNodes[ti].x - simNodes[si].x;
       const dy = simNodes[ti].y - simNodes[si].y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const force = (dist - 120) * 0.005;
+      const force = (dist - idealEdgeLen) * springK;
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
       simNodes[si].vx += fx;
@@ -162,28 +263,27 @@ export default function KnowledgePage() {
       simNodes[ti].vy -= fy;
     }
 
-    // 中心引力
+    // 中心引力 — 增强，防止孤立分量飘走
     for (const n of simNodes) {
-      n.vx += (centerX - n.x) * 0.001;
-      n.vy += (centerY - n.y) * 0.001;
+      n.vx += (centerX - n.x) * centerGravity;
+      n.vy += (centerY - n.y) * centerGravity;
     }
 
     // 应用速度（拖拽中的节点使用固定位置）
     for (const n of simNodes) {
       if (n.fx !== undefined && n.fy !== undefined) {
-        // 被拖拽的节点：位置固定，速度清零
         n.x = n.fx;
         n.y = n.fy;
         n.vx = 0;
         n.vy = 0;
       } else {
-        n.vx *= 0.9;
-        n.vy *= 0.9;
+        n.vx *= 0.85; // 更强阻尼让图更快稳定
+        n.vy *= 0.85;
         n.x += n.vx;
         n.y += n.vy;
-        // 边界约束
-        n.x = Math.max(40, Math.min(w - 40, n.x));
-        n.y = Math.max(40, Math.min(h - 40, n.y));
+        // 边界约束（更宽松，允许画布外溢一点配合平移缩放）
+        n.x = Math.max(-200, Math.min(w + 200, n.x));
+        n.y = Math.max(-200, Math.min(h + 200, n.y));
       }
     }
   }, [edges]);
@@ -231,6 +331,8 @@ export default function KnowledgePage() {
     if (!ctx) return;
 
     let running = true;
+    let frameCount = 0;
+    let hasFittedView = false;
 
     // 响应式调整 canvas 尺寸
     const resizeCanvas = () => {
@@ -243,9 +345,43 @@ export default function KnowledgePage() {
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
 
+    /** 自动适配视图：缩放平移让所有节点可见 */
+    const fitToView = () => {
+      const simNodes = simNodesRef.current;
+      if (simNodes.length === 0) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const n of simNodes) {
+        const r = nodeRadius(n.concept, edges);
+        minX = Math.min(minX, n.x - r);
+        maxX = Math.max(maxX, n.x + r);
+        minY = Math.min(minY, n.y - r);
+        maxY = Math.max(maxY, n.y + r);
+      }
+      const graphW = maxX - minX;
+      const graphH = maxY - minY;
+      const padding = 80;
+      const scaleX = (canvas.width - padding * 2) / graphW;
+      const scaleY = (canvas.height - padding * 2) / graphH;
+      const scale = Math.max(0.2, Math.min(2, Math.min(scaleX, scaleY)));
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      transformRef.current = {
+        offsetX: canvas.width / 2 - cx * scale,
+        offsetY: canvas.height / 2 - cy * scale,
+        scale,
+      };
+    };
+
     const animate = () => {
       if (!running) return;
       tick();
+      frameCount++;
+
+      // 模拟稳定后自动适配视图（仅一次）
+      if (!hasFittedView && frameCount === 80) {
+        fitToView();
+        hasFittedView = true;
+      }
 
       const { width, height } = canvas;
       const t = transformRef.current;
@@ -610,7 +746,7 @@ export default function KnowledgePage() {
 
             <button
               type="button"
-              onClick={() => router.push(`/?q=${encodeURIComponent(selected.concept)}`)}
+              onClick={() => router.push(`/?q=${encodeURIComponent(fill("learn_concept", { concept: selected.concept }))}`)}
               className="mt-2 flex w-full items-center justify-center rounded-lg bg-[#C67A4A] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#b06a3a]"
             >
               开始学习「{selected.concept}」

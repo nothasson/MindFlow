@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { colors } from "../theme/colors";
 import * as api from "../lib/api";
+import { MarkdownRenderer } from "../components/MarkdownRenderer";
 import type { ReviewItem, QuizQuestion, QuizSubmitResult } from "../lib/types";
 
 // ===== 阶段定义 =====
@@ -89,22 +90,25 @@ export function ReviewSessionScreen() {
   }, [initialize]);
 
   // 为某个概念生成题目
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const loadQuestion = async (concept: string) => {
     setPhase("loading");
     setAnswer("");
     setGradeResult(null);
+    setLoadError(null);
     try {
       const questions = await api.generateQuiz(concept, 1);
       if (questions.length > 0) {
         setCurrentQuestion(questions[0]);
         setPhase("question");
       } else {
-        // 无法生成题目，跳到下一个
-        handleNextAfterRate();
+        setLoadError("题目生成为空，请重试");
+        setPhase("question"); // 留在当前界面让用户看到
       }
-    } catch {
-      // 生成失败，跳过
-      handleNextAfterRate();
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "题目生成失败，请重试");
+      setPhase("question");
     }
   };
 
@@ -171,13 +175,37 @@ export function ReviewSessionScreen() {
 
   // ===== 渲染 =====
 
-  // 加载中
+  // 加载中（保留返回按钮和进度信息）
   if (phase === "loading") {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <View style={styles.header}>
+          <View style={styles.headerRow}>
+            <Pressable onPress={handleGoBack} style={styles.backBtn}>
+              <Text style={styles.backBtnText}>← 返回</Text>
+            </Pressable>
+            {reviewItems.length > 0 && (
+              <Text style={styles.progressLabel}>
+                {currentIndex + 1} / {reviewItems.length}
+              </Text>
+            )}
+          </View>
+          {reviewItems.length > 0 && (
+            <View style={styles.progressBarBg}>
+              <View style={[styles.progressBarFill, { width: `${((currentIndex + 1) / reviewItems.length) * 100}%` }]} />
+            </View>
+          )}
+        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.brand} />
-          <Text style={styles.loadingText}>正在准备题目...</Text>
+          <Text style={styles.loadingText}>
+            {reviewItems.length > 0
+              ? `正在为「${reviewItems[currentIndex]?.concept}」生成题目...`
+              : "正在加载复习内容..."}
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.stone400, marginTop: 4 }}>
+            AI 生成中，请稍候
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -244,7 +272,7 @@ export function ReviewSessionScreen() {
             <Text style={styles.completeSubtext}>暂无待复习的内容</Text>
           )}
 
-          <Pressable style={styles.primaryBtn} onPress={handleGoBack}>
+          <Pressable style={[styles.primaryBtn, { width: "100%" }]} onPress={handleGoBack}>
             <Text style={styles.primaryBtnText}>返回复习计划</Text>
           </Pressable>
         </View>
@@ -295,13 +323,33 @@ export function ReviewSessionScreen() {
         {/* 问题卡片 */}
         <View style={styles.questionCard}>
           <Text style={styles.questionLabel}>问题</Text>
-          <Text style={styles.questionText}>
-            {currentQuestion?.question}
-          </Text>
+          <MarkdownRenderer content={currentQuestion?.question || ""} />
+          {currentQuestion?.hint ? (
+            <View style={{ marginTop: 12, padding: 12, backgroundColor: "rgba(198, 122, 74, 0.06)", borderRadius: 10 }}>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: colors.brand, marginBottom: 4 }}>提示</Text>
+              <MarkdownRenderer content={currentQuestion.hint} />
+            </View>
+          ) : null}
         </View>
 
         {/* 答案输入（答题阶段） */}
-        {phase === "question" && (
+        {phase === "question" && loadError ? (
+          <View style={styles.answerCard}>
+            <Text style={{ fontSize: 14, color: colors.error, textAlign: "center", marginBottom: 12 }}>{loadError}</Text>
+            <Pressable
+              style={styles.primaryBtn}
+              onPress={() => loadQuestion(reviewItems[currentIndex]?.concept)}
+            >
+              <Text style={styles.primaryBtnText}>重试</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.primaryBtn, { backgroundColor: colors.stone200, marginTop: 8 }]}
+              onPress={handleNextAfterRate}
+            >
+              <Text style={[styles.primaryBtnText, { color: colors.stone600 }]}>跳过此题</Text>
+            </Pressable>
+          </View>
+        ) : phase === "question" && (
           <>
             <View style={styles.answerCard}>
               <Text style={styles.answerLabel}>你的回答</Text>

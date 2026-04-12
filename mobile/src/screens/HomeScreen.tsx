@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, StyleSheet, View, Text, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, DrawerActions, useRoute } from "@react-navigation/native";
@@ -8,6 +8,7 @@ import { MessageBubble } from "../components/MessageBubble";
 import { ChatInput } from "../components/ChatInput";
 import { DailyBriefing } from "../components/DailyBriefing";
 import { colors } from "../theme/colors";
+import { getPromptTemplates, fillTemplate, type PromptTemplates } from "../lib/api";
 import type { BriefingItem, Message } from "../lib/types";
 
 export function HomeScreen() {
@@ -18,6 +19,12 @@ export function HomeScreen() {
   const handledConversationRef = useRef<string | null>(null);
   const { messages, currentConversationId, isStreaming, sendMessage, stopStreaming, newChat, selectConversation } =
     useChatStore();
+
+  // Prompt 模板
+  const [templates, setTemplates] = useState<PromptTemplates>({});
+  useEffect(() => {
+    getPromptTemplates().then(setTemplates).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const params = route.params ?? {};
@@ -83,16 +90,16 @@ export function HomeScreen() {
 
   const handleReviewItem = useCallback(
     async (item: BriefingItem) => {
-      await startPromptedChat(`复习一下「${item.concept}」`);
+      await startPromptedChat(fillTemplate(templates.review_concept || "复习一下「{{concept}}」", { concept: item.concept }));
     },
-    [startPromptedChat]
+    [startPromptedChat, templates]
   );
 
   const handleNewItem = useCallback(
     async (item: BriefingItem) => {
-      await startPromptedChat(`我想学习「${item.concept}」`);
+      await startPromptedChat(fillTemplate(templates.learn_new_concept || "我想学习「{{concept}}」", { concept: item.concept }));
     },
-    [startPromptedChat]
+    [startPromptedChat, templates]
   );
 
   const handleQuizSuggestion = useCallback(
