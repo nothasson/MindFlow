@@ -12,12 +12,15 @@
 </p>
 
 <p align="center">
-  <a href="#快速开始">快速开始</a> ·
+  <a href="#这是什么">这是什么</a> ·
   <a href="#核心功能">核心功能</a> ·
   <a href="#系统架构">系统架构</a> ·
+  <a href="#技术栈">技术栈</a> ·
   <a href="#移动端">移动端</a> ·
+  <a href="#快速开始">快速开始</a> ·
   <a href="#部署文档">部署文档</a> ·
   <a href="#开发文档">开发文档</a> ·
+  <a href="#数据库设计">数据库设计</a> ·
   <a href="#api-接口文档">API 文档</a>
 </p>
 
@@ -35,8 +38,9 @@ MindFlow 是一个 **AI 私人导师**——上传学习资料，AI 自动解析
 | 记忆能力 | 每次对话从头开始 | L0-L3 四层记忆，跨会话持续记忆学习状态 |
 | 学习节奏 | 被动等提问 | AI 主动安排复习、推荐下一步、生成晨间简报 |
 | 错误处理 | "答案是 X" | 8 种错误分类 + 根源追踪 + 6 种变式题训练 |
-| 复习系统 | 无 | FSRS 自适应间隔重复 + 易混淆交错复习 |
+| 复习系统 | 无 | FSRS v4 自适应间隔重复 + 易混淆交错复习 |
 | 知识管理 | 无 | 自动构建知识图谱 + 力导向可视化 + 语义搜索 |
+| 用户系统 | 无 | 完整注册登录 + JWT 鉴权 + 多用户数据完全隔离 |
 
 ### 界面预览
 
@@ -68,9 +72,10 @@ MindFlow 是一个 **AI 私人导师**——上传学习资料，AI 自动解析
 ## 目录
 
 - [核心功能](#核心功能)
+  - [用户系统](#0-用户系统与数据隔离)
   - [苏格拉底式对话](#1-苏格拉底式对话)
   - [多 Agent 系统](#2-多-agent-系统)
-  - [三层记忆系统](#3-三层记忆系统)
+  - [四层记忆系统](#3-四层记忆系统)
   - [FSRS 自适应复习](#4-fsrs-自适应复习)
   - [三模式测验](#5-三模式测验)
   - [知识图谱](#6-知识图谱)
@@ -79,6 +84,7 @@ MindFlow 是一个 **AI 私人导师**——上传学习资料，AI 自动解析
   - [考试模式](#9-考试模式)
   - [资料理解](#10-资料理解)
   - [学习仪表盘](#11-学习仪表盘)
+  - [LLM 对话质量评估](#12-llm-对话质量评估)
 - [系统架构](#系统架构)
 - [技术栈](#技术栈)
 - [移动端](#移动端)
@@ -92,6 +98,43 @@ MindFlow 是一个 **AI 私人导师**——上传学习资料，AI 自动解析
 ---
 
 ## 核心功能
+
+### 0. 用户系统与数据隔离
+
+MindFlow 拥有完整的多用户系统。每位用户独立注册、登录，所有学习数据（对话、知识图谱、资料、测验、错题、考试计划）均完全隔离，互不干扰。
+
+#### 认证流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant FE as 前端/移动端
+    participant BE as Go 后端
+    participant DB as PostgreSQL
+
+    U->>FE: 填写邮箱 + 密码
+    FE->>BE: POST /api/auth/register
+    BE->>BE: bcrypt 哈希密码
+    BE->>DB: INSERT users
+    BE-->>FE: JWT Token (7天有效期)
+    FE->>FE: 存储 Token (localStorage / AsyncStorage)
+
+    U->>FE: 下次访问
+    FE->>BE: 携带 Bearer Token
+    BE->>BE: JWTAuth 中间件验证
+    BE->>BE: 从 Token 提取 user_id
+    BE-->>FE: 返回该用户专属数据
+```
+
+#### 用户隔离覆盖范围
+
+以下 9 张数据表均通过 `user_id` 实现行级隔离：
+
+`conversations` · `resources` · `knowledge_mastery` · `quiz_attempts` · `wrong_book` · `exam_plans` · `courses` · `knowledge_source_links` · `llm_evaluations`
+
+> **关键代码路径**：`backend/internal/handler/auth.go`（注册/登录）、`backend/migrations/013_users.sql`（用户表）、`backend/migrations/014_user_isolation.sql`（隔离扩展）
+
+---
 
 ### 1. 苏格拉底式对话
 
@@ -127,17 +170,21 @@ stateDiagram-v2
 
 难度自动适应：错误率 > 60% → 初学模式 | 错误率 < 20% 且连续 3 正确 → 专家模式。
 
-> **关键代码路径**：`backend/internal/agent/tutor.go`（IARA/CARA/SER Prompt）、`backend/internal/agent/orchestrator.go`（StuckDetector + autoAdjustLevel）
+#### 四层注入防护
+
+PromptGuard 内置 **32 条正则规则**（中英文各 16 条），配合三明治式 Prompt 结构（Header + 核心指令 + Footer）防范提示词注入。检测到注入尝试时，友好引导用户回到正常学习轨道。
+
+> **关键代码路径**：`backend/internal/agent/tutor.go`（IARA/CARA/SER Prompt）、`backend/internal/agent/orchestrator.go`（StuckDetector + autoAdjustLevel）、`backend/internal/agent/guard.go`（32 条注入规则）
 
 ---
 
 ### 2. 多 Agent 系统
 
-基于 **Eino** 框架编排 9 个专职 Agent，Orchestrator 通过 LLM 语义路由（严禁关键词匹配）分发到最合适的 Agent。
+基于 **Eino 0.8.7** 框架编排 9 个专职 Agent，Orchestrator 通过 LLM 语义路由（严禁关键词匹配）分发到最合适的 Agent。
 
 ```mermaid
 graph TB
-    User[用户消息] --> Guard[PromptGuard<br/>四层注入防御]
+    User[用户消息] --> Guard[PromptGuard<br/>32 条注入防御]
     Guard --> Orch[Orchestrator<br/>LLM 语义路由]
 
     Orch -->|学习提问| Tutor[Tutor Agent<br/>苏格拉底教学]
@@ -163,22 +210,22 @@ graph TB
 
 | Agent | 职责 | 触发条件 |
 |-------|------|---------|
-| **Orchestrator** | LLM 分析用户意图，路由到对应 Agent | 每条用户消息 |
-| **Tutor** | 苏格拉底式教学（IARA/CARA/SER） | 学习提问（默认） |
-| **Diagnostic** | 分析回答，8 种错误分类（5 基础 + 3 元认知） | 学生给出明确答案时 |
+| **Orchestrator** | LLM 分析用户意图，路由到对应 Agent；StuckDetector 追踪错误率 | 每条用户消息 |
+| **Tutor** | 苏格拉底式教学（IARA/CARA/SER），~326 行系统 Prompt | 学习提问（默认） |
+| **Diagnostic** | 分析回答，8 种错误分类（5 基础 + 3 元认知），输出结构化 JSON | 学生给出明确答案时 |
 | **Memory** | L0-L3 分层记忆读写，维护学生画像 | Tutor/Diagnostic 调用 |
-| **Content** | 基于上传资料的 RAG 检索教学，标注来源 | 提到资料/文档/上传内容时 |
+| **Content** | 基于上传资料的 RAG 检索教学，标注来源 `【资料名:第X段】` | 提到资料/文档/上传内容时 |
 | **Quiz** | Bloom 认知分层出题 + 对话考察 + Anki | 要求测试/检验掌握度 |
 | **Review** | FSRS 复习调度 + 易混淆概念交错 | "开始复习""复习一下" |
-| **Curriculum** | AI 晨间简报 + 拓扑排序学习路径 | "接下来学什么"/学习建议 |
-| **Courseware** | 资料转结构化章节课程 | 生成课程触发 |
+| **Curriculum** | AI 晨间简报 + 拓扑排序学习路径，叙事口吻（非列表） | "接下来学什么"/学习建议 |
+| **Courseware** | 资料转结构化章节课程（含学习目标 + 苏格拉底问题） | 生成课程触发 |
 | **VariantQuiz** | 根据错误类型生成 6 种变式题 | 错题练习触发 |
 
 > **关键代码路径**：`backend/internal/agent/orchestrator.go`（路由决策）、`backend/internal/agent/guard.go`（注入防护）
 
 ---
 
-### 3. 三层记忆系统
+### 3. 四层记忆系统
 
 借鉴 MemPalace 设计，MindFlow 拥有跨会话的持久记忆能力。每层有明确的 Token 预算和加载策略。
 
@@ -229,7 +276,7 @@ graph TB
 
 ### 4. FSRS 自适应复习
 
-使用 **FSRS v4 算法**替代 SM-2，基于可优化权重，根据个人历史数据自适应调整复习间隔。
+使用 **FSRS v4 算法**（go-fsrs v3.3.1）替代 SM-2，基于可优化权重，根据个人历史数据自适应调整复习间隔。
 
 ```mermaid
 flowchart LR
@@ -253,12 +300,16 @@ flowchart LR
 
 #### 四级评分
 
-| 按钮 | 含义 | 影响 |
-|------|------|------|
-| **Again** | 完全忘记 | 重置间隔，大幅降低稳定性，lapses+1 |
-| **Hard** | 勉强想起 | 轻微增加间隔 |
-| **Good** | 正常回忆 | 正常增加间隔 |
-| **Easy** | 非常简单 | 大幅增加间隔 |
+| 按钮 | 含义 | 置信度映射 | 影响 |
+|------|------|----------|------|
+| **Again** | 完全忘记 | 0.2 | 重置间隔，大幅降低稳定性，lapses+1 |
+| **Hard** | 勉强想起 | 0.55 | 轻微增加间隔 |
+| **Good** | 正常回忆 | 0.85 | 正常增加间隔 |
+| **Easy** | 非常简单 | 1.0 | 大幅增加间隔 |
+
+#### 卡片状态机
+
+`New（新）→ Learning（学习中）→ Review（复习）→ Relearning（重学）`
 
 #### 易混淆交错复习
 
@@ -306,14 +357,14 @@ graph TB
 
 #### Bloom 认知分类法出题
 
-| 掌握度 | 出题层级 | 题目类型 |
-|--------|---------|---------|
-| < 30% | 记忆 | 定义、识别 |
-| 30-50% | 理解 | 解释、比较 |
-| 50-70% | 应用 | 实际问题求解 |
-| 70-85% | 分析 | 推理、归因 |
-| 85-95% | 评价 | 判断、评估 |
-| > 95% | 创造 | 设计、综合 |
+| 掌握度（置信度） | 出题层级 | 题目类型 |
+|----------------|---------|---------|
+| < 30% | 记忆 (Remember) | 定义、识别 |
+| 30–50% | 理解 (Understand) | 解释、比较 |
+| 50–70% | 应用 (Apply) | 实际问题求解 |
+| 70–85% | 分析 (Analyze) | 推理、归因 |
+| 85–95% | 评价 (Evaluate) | 判断、评估 |
+| > 95% | 创造 (Create) | 设计、综合 |
 
 > **关键代码路径**：`backend/internal/agent/quiz.go`（出题 + 评分）、`backend/internal/handler/quiz.go`（三模式 Handler）
 
@@ -333,7 +384,7 @@ flowchart LR
     E --> F
     F --> G[合并去重]
     G --> H[写入 PostgreSQL<br/>knowledge_mastery<br/>knowledge_relations]
-    H --> I[向量化存入 Qdrant<br/>concept + description]
+    H --> I[256D 向量化存入 Qdrant<br/>concept + description]
     I --> J[前端力导向图渲染]
     H --> K[来源关联<br/>knowledge_source_links]
 
@@ -342,15 +393,15 @@ flowchart LR
 
 #### 知识点属性
 
-每个知识点包含：Bloom 认知层级（remember → create）、重要度（0-1）、粒度等级（L1 学科 → L4 细节）、描述。
+每个知识点包含：Bloom 认知层级（remember → create）、重要度（0–1）、粒度等级（L1 学科 → L4 细节）、描述。概念名称限制 4–10 字，确保精确且可搜索。
 
 #### 关系类型
 
-`prerequisite`（前置） / `similar`（相似） / `application`（应用） / `part_of`（从属） / `causal`（因果），每条关系带 `strength` 关联强度。
+`prerequisite`（前置） / `similar`（相似） / `application`（应用） / `part_of`（从属） / `causal`（因果），每条关系带 `strength` 关联强度（0–1）。
 
 #### 可视化
 
-- 节点颜色 = 掌握度（绿 > 0.7 / 黄 0.3-0.7 / 红 < 0.3）
+- 节点颜色 = 掌握度（绿 > 0.7 / 黄 0.3–0.7 / 红 < 0.3）
 - 点击节点展示详情面板 + **来源追溯**（哪份资料提取、哪些测验涉及）
 - 支持按掌握度/关系类型筛选
 
@@ -358,11 +409,13 @@ flowchart LR
 
 知识点薄弱时，通过 PostgreSQL **递归 CTE** 沿 `prerequisite` 关系向上追踪，找出根源性的薄弱前置知识。
 
-#### 语义搜索
+#### 双向语义搜索
 
-知识点存入 Qdrant 向量库，支持自然语言搜索（"我想学微积分"）和易混淆概念自动检测（高相似度 + 不同含义）。
+知识图谱存入 Qdrant 两个独立 Collection：
+- `documents`：原始文档分块，支持 RAG 检索
+- `knowledge_embeddings`：知识点向量，支持语义搜索和易混淆概念检测
 
-> **关键代码路径**：`backend/internal/handler/knowledge.go`（Graph/PrerequisiteChain/SemanticSearch）、`backend/internal/repository/knowledge.go`（递归 CTE）、`ai-service/app/routers/`（向量化接口）
+> **关键代码路径**：`backend/internal/handler/knowledge.go`、`backend/internal/repository/knowledge.go`（递归 CTE）、`ai-service/app/routers/`
 
 ---
 
@@ -387,50 +440,66 @@ flowchart LR
 | 元认知 | 策略错误 | `strategy_error` | 选错解题策略 |
 | 元认知 | 表述不清 | `unclear_expression` | 思路可能对但表达混乱 |
 
-#### 6 种变式题
+#### 6 种变式题与错误类型匹配
 
-根据错误类型自动匹配变式策略：参数变换（换数字）、情境变换（换场景）、角度变换（换切入点）、反向出题（已知结果求条件）、简化变式（降低难度）、综合变式（组合多知识点）。
+| 错误类型 | 匹配变式 | 说明 |
+|---------|---------|------|
+| knowledge_gap | 简化变式 | 降低难度，从前置知识入手 |
+| concept_confusion | 反向出题 | 已知结果求条件，强化区分 |
+| concept_error | 情境变换 | 换场景加深理解 |
+| method_error | 角度变换 | 换切入点重新解题 |
+| calculation_error | 参数变换 | 换数字强化计算 |
+| overconfidence | 综合变式 | 组合多知识点挑战 |
 
-> **关键代码路径**：`backend/internal/agent/variant_quiz.go`（变式生成）、`backend/internal/handler/wrongbook.go`（错题本 Handler）
+> **关键代码路径**：`backend/internal/agent/variant_quiz.go`、`backend/internal/handler/wrongbook.go`
 
 ---
 
 ### 8. AI 晨间简报
 
-首页打开时自动生成今日学习建议：
+首页打开时自动生成今日学习建议，输出严格 JSON：
 
-- **待复习** — 到期知识点，按紧急度排序
-- **建议新学** — 基于知识图谱拓扑顺序推荐
-- **测验巩固** — 最薄弱知识点，建议做测验
+```json
+{
+  "greeting": "昨天特征值学得不错，今天继续挑战一下特征向量吧",
+  "review_items": [
+    {"concept": "特征值分解", "reason": "距上次复习已 3 天", "est_minutes": 5}
+  ],
+  "new_items": [
+    {"concept": "矩阵秩", "reason": "是正交矩阵的前置知识", "est_minutes": 10}
+  ],
+  "quiz_suggestion": {"concept": "行列式", "reason": "掌握度 45%，建议出题巩固", "est_minutes": 8}
+}
+```
 
 简报默认收起为胶囊按钮，展开为标签云，每个标签可一键跳转到对应功能。
 
-> **关键代码路径**：`backend/internal/agent/curriculum.go`（Curriculum Agent）、`backend/internal/handler/briefing.go`（简报 Handler）
+> **关键代码路径**：`backend/internal/agent/curriculum.go`、`backend/internal/handler/briefing.go`
 
 ---
 
 ### 9. 考试模式
 
-创建考试计划 → 选择关联知识点 → 系统自动加速复习频率（默认 1.5x）→ 仪表盘展示倒计时。
+创建考试计划 → 选择关联知识点 → 系统自动加速复习频率（默认 1.5×）→ 仪表盘展示倒计时。
 
-> **关键代码路径**：`backend/internal/handler/exam.go`（ExamHandler）、`backend/migrations/011_exam_plan.sql`
+> **关键代码路径**：`backend/internal/handler/exam.go`、`backend/migrations/011_exam_plan.sql`
 
 ---
 
 ### 10. 资料理解
 
-支持 **PDF / 纯文本 / URL** 三种格式，上传后自动执行全链路处理：
+支持 **PDF / DOCX / PPTX / 纯文本 / URL** 五种格式，上传后自动执行全链路处理：
 
-1. **文档解析** — PyMuPDF 提取文本
-2. **向量化** — 生成 Embedding 存入 Qdrant
+1. **文档解析** — PyMuPDF（PDF）/ python-docx（DOCX）/ python-pptx（PPTX）提取文本
+2. **向量化** — 生成 256D Embedding 存入 Qdrant `documents` Collection
 3. **知识点提取** — LLM 提取（含 Bloom 层级、多种关系）
-4. **自动概览** — 200 字摘要 + 3-5 个建议学习问题
-5. **知识点向量化** — 每个知识点存入独立 collection
-6. **来源关联** — knowledge_source_links 表追溯知识来源
+4. **自动概览** — 200 字摘要 + 3–5 个建议学习问题
+5. **知识点向量化** — 每个知识点存入 `knowledge_embeddings` Collection
+6. **来源关联** — `knowledge_source_links` 表追溯知识来源
 
 长文本（> 6000 字）自动按章节**分块提取 + 合并去重**。Content Agent 教学时标注来源引用（如 `【资料名:第3段】`）。
 
-> **关键代码路径**：`backend/internal/handler/resource.go`（Upload/ImportURL）、`ai-service/app/routers/`（parse/embed/extract）
+> **关键代码路径**：`backend/internal/handler/resource.go`、`ai-service/app/routers/`（parse/embed/extract/search）
 
 ---
 
@@ -448,41 +517,53 @@ flowchart LR
 
 ---
 
+### 12. LLM 对话质量评估
+
+系统内置 LLM 评估模块，对对话质量、诊断准确率、出题质量三个维度打分（0–1），结果存入 `llm_evaluations` 表，通过 `/api/evaluations/stats` 可查看统计趋势，用于持续改进 Prompt 策略。
+
+> **关键代码路径**：`backend/migrations/015_llm_evaluation.sql`、`backend/internal/handler/evaluation.go`
+
+---
+
 ## 系统架构
 
 三服务架构，共享数据层：
 
 ```mermaid
 graph TB
-    subgraph 前端
+    subgraph 前端 / 移动端
         FE[Next.js 16<br/>React 19 + Tailwind CSS 4<br/>:3000]
+        Mobile[React Native 0.83<br/>Expo 55<br/>iOS & Android]
     end
 
     subgraph Go 后端
         Hertz[Hertz HTTP Server<br/>:8080]
-        Agents[Eino 9 Agents<br/>Orchestrator / Tutor / Diagnostic<br/>Memory / Content / Quiz<br/>Review / Curriculum / Courseware]
+        JWT[JWTAuth 中间件<br/>golang-jwt v5]
+        Agents[Eino 0.8.7 · 9 Agents<br/>Orchestrator / Tutor / Diagnostic<br/>Memory / Content / Quiz<br/>Review / Curriculum / Courseware]
         LLM[LLM ModelSwitch<br/>硅基流动 / Codex 热切换]
-        MemSys[三层记忆系统<br/>L0-L3 + Dreaming Sweep]
-        FSRS[FSRS v4 算法<br/>自适应间隔重复]
+        MemSys[四层记忆系统<br/>L0-L3 + Dreaming Sweep]
+        FSRS[go-fsrs v3 算法<br/>自适应间隔重复]
     end
 
     subgraph Python AI 微服务
         FastAPI[FastAPI<br/>:8000]
-        Parse[文档解析<br/>PyMuPDF]
-        Embed[Embedding 生成]
+        Parse[文档解析<br/>PyMuPDF + python-docx]
+        Embed[256D Embedding 生成]
         Extract[知识点提取]
         Search[向量检索]
     end
 
     subgraph 数据层
-        PG[(PostgreSQL 16<br/>12 张表)]
-        QD[(Qdrant<br/>向量存储)]
+        PG[(PostgreSQL 16<br/>16+ 张表 · 17 次迁移)]
+        QD[(Qdrant<br/>documents<br/>knowledge_embeddings)]
         RD[(Redis 7<br/>缓存)]
         MD[Markdown 文件<br/>记忆持久化]
     end
 
     FE -->|SSE 流式 / REST| Hertz
-    Hertz --> Agents
+    Mobile -->|SSE 流式 / REST| Hertz
+    Hertz --> JWT
+    JWT --> Agents
     Agents --> LLM
     Agents --> MemSys
     Agents --> FSRS
@@ -499,10 +580,12 @@ graph TB
     Hertz --> RD
 
     style FE fill:#3498DB,color:#fff
+    style Mobile fill:#3498DB,color:#fff
     style Hertz fill:#2ECC71,color:#fff
     style FastAPI fill:#E67E22,color:#fff
     style PG fill:#8E44AD,color:#fff
     style QD fill:#E74C3C,color:#fff
+    style JWT fill:#E74C3C,color:#fff
 ```
 
 ### 对话流程时序
@@ -510,19 +593,21 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant U as 用户
-    participant FE as 前端
+    participant FE as 前端/移动端
     participant BE as Go 后端
+    participant JWT as JWTAuth
     participant O as Orchestrator
     participant G as PromptGuard
     participant A as Agent
     participant M as Memory Agent
-    participant AI as Python AI 微服务
     participant DB as PostgreSQL
 
     U->>FE: 输入消息
-    FE->>BE: POST /api/chat (SSE)
-    BE->>DB: 保存用户消息
-    BE->>G: 注入检测
+    FE->>BE: POST /api/chat (Bearer Token + SSE)
+    BE->>JWT: 验证 Token，提取 user_id
+    JWT-->>BE: user_id 注入 context
+    BE->>DB: 保存用户消息（含 user_id）
+    BE->>G: 注入检测（32 条规则）
     G-->>BE: 通过
 
     BE->>O: 路由决策
@@ -540,7 +625,7 @@ sequenceDiagram
         FE-->>U: 打字机效果渲染
     end
 
-    BE->>DB: 保存 AI 回复
+    BE->>DB: 保存 AI 回复（含 user_id）
     BE->>M: 记录学习日志
     BE->>O: autoAdjustLevel()
 ```
@@ -549,29 +634,39 @@ sequenceDiagram
 
 ## 技术栈
 
-| 层级 | 技术 | 用途 |
-|------|------|------|
-| 前端 | TypeScript + Next.js 16 + React 19 | 页面路由和交互 |
-| 前端 | Tailwind CSS 4 | 样式系统 |
-| 后端 | Go 1.26 + Hertz | HTTP/SSE 服务器 |
-| 后端 | Eino | Agent 编排框架（LLM 路由/工具调用） |
-| 后端 | pgx | PostgreSQL 驱动（连接池 + 迁移） |
-| AI 微服务 | Python 3.11 + FastAPI | AI/ML 工作负载 |
-| AI 微服务 | PyMuPDF | PDF 文档解析 |
-| AI 微服务 | Qdrant Client | 向量数据库客户端 |
-| LLM | 硅基流动 SiliconFlow（默认） | LLM 推理服务 |
-| LLM | Codex GPT-5.4（可选） | 备选 LLM，设置页热切换 |
-| 数据库 | PostgreSQL 16 | 结构化数据（12 张表） |
-| 数据库 | Qdrant | 向量存储（语义搜索 + Embedding） |
-| 数据库 | Redis 7 | 缓存和调度 |
-| 算法 | FSRS v4 | 自适应间隔重复 |
-| 算法 | Kahn 拓扑排序 | 学习路径生成 |
-| 算法 | Bloom 认知分类法 | 出题层级匹配 |
-| 部署 | Docker Compose | 6 服务编排 |
-| 移动端 | React Native 0.83 + Expo 55 | iOS & Android 原生应用 |
-| 移动端 | React Navigation（Drawer + Tab） | 抽屉侧栏 + 底部 Tab 双层导航 |
-| 移动端 | Zustand + AsyncStorage | 状态管理 + 本地持久化 |
-| 移动端 | react-native-svg | SVG 图标 + 知识图谱可视化 |
+| 层级 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+| 前端 | Next.js | 16.2.3 | 页面路由和 SSR |
+| 前端 | React | 19.2.4 | UI 框架 |
+| 前端 | Tailwind CSS | 4.x | 样式系统 |
+| 前端 | TypeScript | 5.x | 类型安全 |
+| 后端 | Go | 1.26 | 核心后端语言 |
+| 后端 | Hertz | 0.10.4 | HTTP/SSE 服务器 |
+| 后端 | Eino | 0.8.7 | Agent 编排框架 |
+| 后端 | Eino-ext/OpenAI | 0.1.12 | LLM Provider 抽象 |
+| 后端 | pgx | v5.9.1 | PostgreSQL 驱动（连接池 + 迁移） |
+| 后端 | golang-jwt | v5.3.1 | JWT 鉴权 |
+| 后端 | go-fsrs | v3.3.1 | FSRS v4 算法 |
+| AI 微服务 | Python | 3.11 | AI/ML 工作负载 |
+| AI 微服务 | FastAPI | 0.115.0 | HTTP 服务 |
+| AI 微服务 | PyMuPDF | 1.25.5 | PDF 文档解析 |
+| AI 微服务 | Qdrant Client | 1.14.2 | 向量数据库客户端 |
+| AI 微服务 | Pydantic | 2.11.1 | 数据验证 |
+| LLM | 硅基流动 SiliconFlow（默认） | — | LLM 推理服务，GLM-5.1 |
+| LLM | Codex（可选） | — | OAuth Token 自动刷新 |
+| 数据库 | PostgreSQL | 16 | 结构化数据（16+ 张表） |
+| 数据库 | Qdrant | latest | 向量存储（2 个 Collection） |
+| 数据库 | Redis | 7 | 缓存 |
+| 算法 | FSRS v4 | — | 自适应间隔重复 |
+| 算法 | Kahn 拓扑排序 | — | 学习路径生成 |
+| 算法 | Bloom 认知分类法 | — | 出题层级匹配 |
+| 部署 | Docker Compose | v2 | 6 服务编排 |
+| 移动端 | React Native | 0.83.2 | iOS & Android 原生应用 |
+| 移动端 | Expo | 55.0.8 | 开发工具链 |
+| 移动端 | React Navigation | 7.x | Drawer + Tab 双层导航 |
+| 移动端 | Zustand | — | 状态管理（authStore / chatStore） |
+| 移动端 | AsyncStorage | — | 本地持久化（Token 存储） |
+| 移动端 | react-native-svg | — | SVG 图标 + 知识图谱可视化 |
 
 ---
 
@@ -583,6 +678,7 @@ MindFlow 提供功能完整的 Android & iOS 原生移动应用，与 Web 端共
 
 | 功能模块 | Web 端 | 移动端 | 说明 |
 |---------|--------|--------|------|
+| 登录 / 注册 | ✅ | ✅ | JWT 持久化，Web 用 localStorage，移动端用 AsyncStorage |
 | 苏格拉底对话 | ✅ | ✅ | SSE 流式消息，打字机效果 |
 | 学习数据仪表盘 | ✅ | ✅ | 热力图、薄弱点、趋势图 |
 | 学习资料管理 | ✅ | ✅ | 文件上传 / URL 导入 / 文本粘贴 |
@@ -593,16 +689,15 @@ MindFlow 提供功能完整的 Android & iOS 原生移动应用，与 Web 端共
 | 学习历程 | ✅ | ✅ | 日历热力图 + 概念进度 + 记忆搜索 |
 | 每日简报 | ✅ | ✅ | 折叠式组件，一键跳转学习 |
 | 设置 | ✅ | ✅ | 教学风格 / LLM 切换 / 考试计划 |
-| 登录/注册 | ✅ | ✅ | JWT 持久化，AsyncStorage 存储 |
 
 ### 移动端导航架构
 
 ```
-App
+App (Root Stack)
 ├── LoginScreen                  ← 未登录时
 └── MainDrawer（侧边抽屉）        ← 已登录
     ├── 主导航（底部 Tab）
-    │   ├── 聊天 (HomeScreen)        ← 苏格拉底对话
+    │   ├── 聊天 (HomeScreen)        ← 苏格拉底对话（默认页）
     │   ├── 复习 (ReviewScreen)      ← 复习日历 + 待复习列表
     │   ├── 测验 (QuizScreen)        ← 三模式测验
     │   ├── 资料 (ResourcesScreen)   ← 资料上传管理
@@ -611,13 +706,15 @@ App
     ├── 知识图谱 (KnowledgeScreen)   ← SVG 力导向图
     ├── 错题本 (WrongbookScreen)     ← 错题分析
     └── 学习历程 (MemoryScreen)      ← 历程 + 搜索
+
+Root Stack 全局层：ReviewSessionScreen（从复习列表进入）
 ```
 
-全局 Stack 层还有 `ReviewSessionScreen`（复习会话），从 ReviewScreen "开始复习"按钮进入。
+### 移动端 SSE 实现
+
+Web 端使用 `Fetch API + SSE`，移动端使用 `XMLHttpRequest + onreadystatechange` 模拟流式读取，两端保持完全相同的协议兼容性。
 
 ### 移动端设计系统
-
-移动端与 Web 端完全一致的视觉语言：
 
 | 设计令牌 | 值 |
 |---------|---|
@@ -629,7 +726,7 @@ App
 | 错误色 | `#ef4444` |
 | 信息色 | `#3b82f6` |
 
-圆角：`16px`（卡片） / `8-12px`（按钮）｜字重：`700`（标题）/ `600`（副标题）/ `400`（正文）
+圆角：`16px`（卡片） / `8–12px`（按钮）｜字重：`700`（标题）/ `600`（副标题）/ `400`（正文）
 
 ### 移动端快速开始
 
@@ -646,19 +743,11 @@ npm start           # 启动 Metro，扫码用 Expo Go 预览
 npm run android     # 连接 Android 设备 / 模拟器
 npm run ios         # 需要 macOS + Xcode
 
-# 修改后端地址
-# 编辑 mobile/src/lib/config.ts
+# 修改后端地址（编辑 mobile/src/lib/config.ts）
 # export const API_URL = "http://<你的服务器IP>:8080";
 ```
 
 > **注意**：Android 模拟器连接本机后端请用 `http://10.0.2.2:8080`，iOS 模拟器直接用 `http://localhost:8080`，真机请用局域网 IP。
-
-### 移动端开发规则
-
-- 修改 Web 前端功能时，**必须同步更新移动端对应屏幕**，确保功能和 UI 一致
-- 修改 `mobile/src/lib/types.ts` 时，确保与 `frontend/src/lib/types.ts` 保持同步
-- 修改 `mobile/src/lib/api.ts` 时，确保 API 调用与后端接口一致
-- 移动端屏幕文件位于 `mobile/src/screens/`，组件位于 `mobile/src/components/`
 
 ---
 
@@ -675,7 +764,9 @@ npm run ios         # 需要 macOS + Xcode
 git clone https://github.com/nothasson/MindFlow.git
 cd MindFlow
 cp .env.example .env
-# 编辑 .env，填入你的 LLM_API_KEY
+# 编辑 .env，至少填入：
+#   LLM_API_KEY=your-api-key
+#   JWT_SECRET=your-random-secret   ← 生产环境务必修改！
 
 # 生产模式启动（完全走 Dockerfile 构建）
 docker compose -f docker-compose.yml up -d
@@ -685,6 +776,20 @@ docker compose logs -f backend
 # 看到 "MindFlow Backend 启动在 :8080" 即可
 
 # 访问 http://localhost:3000
+# 注册账号开始使用
+```
+
+### 启动顺序
+
+Docker Compose 自动按健康检查依赖顺序启动：
+
+```
+PostgreSQL (pg_isready)
+  └→ Redis (redis-cli ping)
+       └→ Qdrant (TCP 6333)
+            └→ Backend (depends_on all healthy)
+                 └→ AI Service (depends_on qdrant)
+                      └→ Frontend (depends_on backend)
 ```
 
 ---
@@ -697,100 +802,80 @@ docker compose logs -f backend
 
 ```bash
 # ===== LLM 配置 =====
-LLM_API_KEY=your-api-key-here          # 必填，硅基流动或其他 OpenAI 兼容服务的 API Key
+LLM_API_KEY=your-api-key-here          # 必填，LLM 服务 API Key
 LLM_BASE_URL=https://api.siliconflow.cn/v1  # LLM API 地址（默认硅基流动）
 LLM_MODEL=Pro/zai-org/GLM-5.1          # 默认模型（推荐 GLM-5.1 成本低）
-CODEX_MODEL=gpt-5.4                     # Codex 备选模型（可选）
+
+# ===== 认证 =====
+JWT_SECRET=change-me-in-production     # 必填，JWT 签名密钥，生产环境必须修改为强随机值
+
+# ===== 跨域 =====
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000  # 前端跨域地址（多个用逗号分隔）
 
 # ===== PostgreSQL =====
-POSTGRES_USER=mindflow                  # 数据库用户名
-POSTGRES_PASSWORD=mindflow_dev          # 数据库密码
-POSTGRES_DB=mindflow                    # 数据库名
-POSTGRES_PORT=5432                      # 对外映射端口
+POSTGRES_USER=mindflow
+POSTGRES_PASSWORD=mindflow_dev
+POSTGRES_DB=mindflow
+POSTGRES_PORT=5432
 
 # ===== Redis =====
-REDIS_PORT=6379                         # Redis 端口
+REDIS_PORT=6379
 
 # ===== Qdrant =====
-QDRANT_HTTP_PORT=6333                   # Qdrant HTTP 端口
-QDRANT_GRPC_PORT=6334                   # Qdrant gRPC 端口
+QDRANT_HTTP_PORT=6333
+QDRANT_GRPC_PORT=6334
 
 # ===== 应用服务端口 =====
-BACKEND_PORT=8080                       # Go 后端端口
-AI_SERVICE_PORT=8000                    # Python AI 微服务端口
-FRONTEND_PORT=3000                      # Next.js 前端端口
+BACKEND_PORT=8080
+AI_SERVICE_PORT=8000
+FRONTEND_PORT=3000
 ```
 
 ### LLM Provider 配置
 
-MindFlow 支持多种 LLM Provider，默认使用硅基流动（SiliconFlow）。
+MindFlow 支持两种 LLM Provider，运行时可热切换（无需重启）。
 
 #### 支持的 Provider
 
-| Provider | 默认模型 | 说明 |
-|----------|---------|------|
-| 硅基流动 (SiliconFlow) | Pro/zai-org/GLM-5.1 | **推荐** - 成本低，适合单用户/自部署 |
-| Codex | gpt-5.4 | 可选 - 需要 Codex API Token |
-| OpenAI | gpt-4o | 需修改配置，支持所有 OpenAI 兼容服务 |
+| Provider | 默认模型 | 注册方式 | 说明 |
+|----------|---------|---------|------|
+| **硅基流动**（SiliconFlow） | Pro/zai-org/GLM-5.1 | 环境变量 | **推荐** — 成本低，适合自部署 |
+| **Codex** | — | 检测本机 OAuth Token | 可选 — 自动检测 `~/.codex/auth.json` |
 
 #### 切换 Provider
 
-Provider 在**后端启动时**由环境变量确定，运行时**无法切换**（出于安全考虑）。要切换 Provider：
-
-**方式 1：修改环境变量（推荐）**
-
-编辑 `.env` 文件：
+**方式 1：修改环境变量（推荐，需重启）**
 
 ```bash
-# 使用硅基流动（默认）
+# 硅基流动（默认）
 LLM_BASE_URL=https://api.siliconflow.cn/v1
 LLM_MODEL=Pro/zai-org/GLM-5.1
 LLM_API_KEY=your-siliconflow-key
 
-# 或使用 OpenAI
+# 或 OpenAI 兼容服务
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o
 LLM_API_KEY=your-openai-key
 ```
 
-然后重启服务：
+**方式 2：运行时 API 切换（无需重启）**
 
 ```bash
-docker compose down
-docker compose up -d
-```
-
-**方式 2：运行时 env 变量**
-
-```bash
-LLM_BASE_URL=https://api.openai.com/v1 \
-LLM_MODEL=gpt-4o \
-LLM_API_KEY=your-openai-key \
-docker compose up -d
-```
-
-#### 检查活跃 Provider
-
-```bash
+# 查看当前 Provider
 curl http://localhost:8080/api/settings/provider
 
-# 响应示例：
-{
-  "active": "硅基流动",
-  "providers": ["硅基流动", "Codex"]
-}
+# 切换 Provider（需已注册）
+curl -X PUT http://localhost:8080/api/settings/provider \
+  -H "Authorization: Bearer <token>" \
+  -d '{"provider": "Codex"}'
 ```
 
 #### 费用对比
 
 | Provider | 参考费用 | 适用场景 |
 |----------|---------|---------|
-| 硅基流动 | ¥0.0008/k tokens | ✓ 推荐 - 便宜，本地部署 |
+| 硅基流动 GLM-5.1 | ¥0.0008/k tokens | ✓ 推荐 — 便宜，本地部署 |
 | OpenAI GPT-4o | $0.003/1k input | 预算充足，需要顶级质量 |
-| Codex | 需商务合作 | 企业用户 |
-
----
 
 ### Docker 生产模式
 
@@ -825,12 +910,22 @@ docker compose restart ai-service
 
 | 服务 | 端口 | 技术 | 说明 |
 |------|------|------|------|
-| `frontend` | 3000 | Next.js 16 | 前端页面 |
-| `backend` | 8080 | Go + Hertz + Eino | 核心后端 + Agent 运行时 |
-| `ai-service` | 8000 | Python + FastAPI | AI/ML 工作负载 |
-| `postgres` | 5432 | PostgreSQL 16 | 结构化数据（自动迁移） |
-| `qdrant` | 6333 / 6334 | Qdrant | 向量存储 |
+| `frontend` | 3000 | Next.js 16.2.3 | 前端页面 |
+| `backend` | 8080 | Go 1.26 + Hertz + Eino | 核心后端 + Agent 运行时 |
+| `ai-service` | 8000 | Python 3.11 + FastAPI | AI/ML 工作负载（9 个端点） |
+| `postgres` | 5432 | PostgreSQL 16 | 结构化数据（16+ 张表，自动迁移） |
+| `qdrant` | 6333 / 6334 | Qdrant | 向量存储（2 个 Collection） |
 | `redis` | 6379 | Redis 7 | 缓存 |
+
+### 数据持久化卷
+
+| 卷名 | 数据 | 挂载服务 |
+|-----|------|---------|
+| mindflow-pg-data | PostgreSQL 数据文件 | postgres |
+| mindflow-redis | Redis 持久化 | redis |
+| mindflow-qdrant | 向量存储 | qdrant |
+| mindflow-memory | 记忆 Markdown 文件 | backend |
+| mindflow-uploads | 用户上传资料 | backend + ai-service（共享） |
 
 ### 何时需要重建镜像
 
@@ -844,11 +939,12 @@ docker compose restart ai-service
 
 | 问题 | 排查 |
 |------|------|
-| 后端启动报 "初始化数据库失败" | 检查 PostgreSQL 是否健康：`docker compose ps postgres` |
+| 后端启动报"初始化数据库失败" | 检查 PostgreSQL 是否健康：`docker compose ps postgres` |
 | AI 微服务不可达 | 后端会自动重试 3 次，若仍失败检查 `docker compose logs ai-service` |
 | 前端 API 请求失败 | 确认 `CORS_ORIGINS` 包含前端地址，确认后端端口 8080 可达 |
 | Qdrant 连接失败 | `docker compose restart qdrant`，检查 6333/6334 端口占用 |
-| LLM 返回空 | 确认 `LLM_API_KEY` 已填入 `.env`，检查余额 |
+| LLM 返回空 | 确认 `LLM_API_KEY` 已填入 `.env`，检查账户余额 |
+| 登录返回 401 | 确认 `JWT_SECRET` 已设置且与上次启动一致 |
 
 ---
 
@@ -859,49 +955,88 @@ docker compose restart ai-service
 ```
 MindFlow/
 ├── backend/                              # Go 后端
-│   ├── cmd/server/main.go                # 入口：路由注册 + 服务初始化
+│   ├── cmd/server/main.go                # 入口：路由注册 + 服务初始化（415 行）
 │   ├── internal/
 │   │   ├── agent/                        # 9 个 Agent 实现
 │   │   │   ├── orchestrator.go           # 总调度器（LLM 路由 + StuckDetector）
-│   │   │   ├── tutor.go                  # 苏格拉底教学（IARA/CARA/SER）
-│   │   │   ├── diagnostic.go             # 错误诊断（8 种分类）
+│   │   │   ├── tutor.go                  # 苏格拉底教学（IARA/CARA/SER，~326 行 Prompt）
+│   │   │   ├── diagnostic.go             # 错误诊断（8 种分类，JSON 输出）
 │   │   │   ├── memory_agent.go           # 记忆读写
-│   │   │   ├── content.go                # RAG 检索教学
-│   │   │   ├── quiz.go                   # Bloom 出题 + 评分
-│   │   │   ├── variant_quiz.go           # 6 种变式题
+│   │   │   ├── content.go                # RAG 检索教学（来源标注）
+│   │   │   ├── quiz.go                   # Bloom 出题 + 三模式评分
+│   │   │   ├── variant_quiz.go           # 6 种变式题（错误类型匹配）
 │   │   │   ├── review.go                 # FSRS 复习调度
-│   │   │   ├── curriculum.go             # 晨间简报 + 学习路径
+│   │   │   ├── curriculum.go             # 晨间简报 + 学习路径（JSON 输出）
 │   │   │   ├── courseware.go             # 章节课程生成
-│   │   │   └── guard.go                  # 四层提示词注入防护
-│   │   ├── handler/                      # 15+ HTTP 处理器
-│   │   ├── memory/                       # 三层记忆系统
-│   │   │   ├── store.go                  # 文件读写（原子写入 + 并发锁）
-│   │   │   └── dreaming.go              # Dreaming Sweep 定时任务
+│   │   │   └── guard.go                  # 四层提示词注入防护（32 条规则）
+│   │   ├── handler/                      # 18+ HTTP 处理器
+│   │   │   ├── auth.go                   # 注册 / 登录 / 获取用户信息
+│   │   │   ├── chat.go                   # SSE 流式对话
+│   │   │   ├── knowledge.go              # 知识图谱（Graph/Chain/Search）
+│   │   │   ├── quiz.go                   # 三模式测验
+│   │   │   ├── review.go                 # FSRS 复习
+│   │   │   ├── resource.go               # 资料上传/导入
+│   │   │   ├── wrongbook.go              # 错题本
+│   │   │   ├── dashboard.go              # 仪表盘统计
+│   │   │   ├── exam.go                   # 考试计划
+│   │   │   ├── briefing.go               # 晨间简报
+│   │   │   ├── memory.go                 # 记忆历程
+│   │   │   ├── course.go                 # 课程管理
+│   │   │   ├── evaluation.go             # LLM 评估
+│   │   │   └── settings.go               # LLM Provider 切换
+│   │   ├── memory/                       # 四层记忆系统
+│   │   │   ├── store.go                  # 文件读写（原子写入 + sync.RWMutex）
+│   │   │   └── dreaming.go               # Dreaming Sweep 定时任务（每日 3AM）
 │   │   ├── review/                       # FSRS 算法实现
-│   │   │   └── sm2.go                    # 间隔重复核心逻辑
+│   │   │   └── sm2.go                    # 间隔重复核心逻辑（go-fsrs 封装）
 │   │   ├── knowledge/                    # 拓扑排序（Kahn 算法）
 │   │   ├── repository/                   # 数据库访问层
 │   │   ├── model/                        # 数据模型
 │   │   ├── llm/                          # LLM 客户端
-│   │   │   ├── model_switch.go           # 多 Provider 热切换
-│   │   │   └── codex.go                  # Codex Provider
+│   │   │   ├── model_switch.go           # 多 Provider 热切换（sync.RWMutex）
+│   │   │   └── codex.go                  # Codex OAuth Token 管理（自动刷新）
 │   │   ├── config/                       # 配置管理
 │   │   └── service/                      # AI 微服务 HTTP 客户端
-│   └── migrations/                       # 12 个 SQL 迁移文件
+│   └── migrations/                       # 17 个 SQL 迁移文件（自动执行）
 ├── ai-service/                           # Python AI 微服务
 │   ├── app/
-│   │   ├── main.py                       # FastAPI 入口
-│   │   ├── routers/                      # API 路由（parse/embed/extract/search/graph/vectorize）
+│   │   ├── main.py                       # FastAPI 入口（9 个端点）
+│   │   ├── routers/                      # API 路由
+│   │   │   ├── parse.py                  # /parse（文档解析）
+│   │   │   ├── parse_url.py              # /parse-url（网页抓取）
+│   │   │   ├── embed.py                  # /embed（256D 向量化）
+│   │   │   ├── upsert.py                 # /upsert（写入 Qdrant）
+│   │   │   ├── search.py                 # /search（向量检索）
+│   │   │   ├── extract.py                # /extract（知识点提取）
+│   │   │   └── knowledge.py              # /knowledge/embed|search|confusable
 │   │   └── services/                     # 业务逻辑
-│   └── tests/
+│   └── tests/                            # pytest 测试
 ├── frontend/                             # Next.js 前端
 │   └── src/
-│       ├── app/                          # 10+ 页面路由
+│       ├── app/                          # 12 个页面路由
+│       │   ├── page.tsx                  # 主页（苏格拉底对话）
+│       │   ├── login/page.tsx            # 登录 + 注册切换
+│       │   ├── dashboard/page.tsx        # 学习仪表盘
+│       │   ├── resources/page.tsx        # 资料管理
+│       │   ├── quiz/page.tsx             # 三模式测验
+│       │   ├── knowledge/page.tsx        # 知识图谱
+│       │   ├── review/page.tsx           # 复习日历
+│       │   ├── review/session/page.tsx   # 复习会话
+│       │   ├── memory/page.tsx           # 学习历程
+│       │   ├── settings/page.tsx         # 设置
+│       │   ├── wrongbook/page.tsx        # 错题本
+│       │   └── courses/[id]/page.tsx     # 课程详情
 │       ├── components/                   # UI 组件
 │       ├── hooks/                        # useChat / useSSE 等
 │       └── lib/                          # API 客户端 + 类型定义
-├── docs/plans/                           # 设计文档和进度追踪
-├── docker-compose.yml                    # 生产编排
+├── mobile/                               # React Native 移动端
+│   └── src/
+│       ├── screens/                      # 11 个屏幕
+│       ├── components/                   # 移动端组件
+│       ├── navigation/                   # Stack + Drawer + Tab 导航
+│       └── lib/                          # api.ts + types.ts + config.ts
+├── docs/plans/                           # 设计文档
+├── docker-compose.yml                    # 生产编排（6 服务）
 ├── docker-compose.override.yml           # 开发模式（源码挂载）
 └── .env.example                          # 环境变量模板
 ```
@@ -913,6 +1048,7 @@ MindFlow/
 ```bash
 cd backend
 go run cmd/server/main.go               # 启动服务
+go build ./...                           # 编译检查
 go test ./...                            # 全部测试
 go test ./internal/agent/ -run TestSM2   # 指定测试
 go test -v ./internal/review/...         # 详细输出
@@ -926,14 +1062,16 @@ pip install -r requirements.txt          # 安装依赖
 pytest                                   # 全部测试
 pytest tests/test_parser.py              # 指定文件
 uvicorn app.main:app --reload            # 启动开发服务器
+# Swagger UI: http://localhost:8000/docs
 ```
 
 #### 前端
 
 ```bash
 cd frontend
-npm install                              # 安装依赖
+npm install
 npm run dev                              # 启动开发服务器
+npm run build && npm run lint            # 构建 + 检查
 npx vitest                               # 单元测试
 npx playwright test                      # E2E 测试
 ```
@@ -966,7 +1104,12 @@ backend/migrations/
 ├── 009_variant_quiz.sql                 # 变式题表
 ├── 010_resource_overview.sql            # 资料概览（摘要 + 建议问题）
 ├── 011_exam_plan.sql                    # 考试计划表
-└── 012_source_links.sql                 # 知识点来源关联表
+├── 012_source_links.sql                 # 知识点来源关联表
+├── 013_users.sql                        # 用户表（email/password_hash/display_name）
+├── 014_user_isolation.sql               # 多用户隔离（6 张表添加 user_id）
+├── 015_llm_evaluation.sql               # LLM 评估表（对话质量打分）
+├── 016_courses_user_isolation.sql       # 课程表用户隔离
+└── 017_source_links_evaluation_user_id.sql  # 来源关联表 + 评估表用户隔离
 ```
 
 ### 添加新 Agent 的步骤
@@ -975,13 +1118,13 @@ backend/migrations/
 2. **注册到 Orchestrator** — 在 `orchestrator.go` 中新增 `AgentType` 常量，在 `Chat()` / `ChatStream()` 的 switch 中添加分支
 3. **更新路由 Prompt** — 在 `OrchestratorSystemPrompt` 中添加新 Agent 的描述和触发条件
 4. **创建 Handler**（如需独立 API） — `backend/internal/handler/new_handler.go`
-5. **注册路由** — 在 `cmd/server/main.go` 中注册新的 HTTP 路由
+5. **注册路由** — 在 `cmd/server/main.go` 中注册新的 HTTP 路由（注意 JWTAuth 中间件）
 6. **编写测试** — `backend/internal/agent/new_agent_test.go`
 
 ### 前后端 API 对接模式
 
-- **普通请求**：前端 `fetch` → Go Handler → 返回 JSON
-- **流式对话**：前端 SSE 连接 → Go Handler 调用 `Agent.ChatStream()` → 逐 token 写入 SSE → 前端打字机渲染
+- **普通请求**：前端 `fetch` → Go Handler（JWTAuth 验证） → 返回 JSON
+- **流式对话**：前端 SSE 连接（`Authorization: Bearer <token>`） → Go Handler 调用 `Agent.ChatStream()` → 逐 token 写入 SSE → 前端打字机渲染
 - **AI 微服务调用**：Go Handler → `service.AIClient.XXX()` → HTTP → Python FastAPI → 返回结果
 
 ---
@@ -990,9 +1133,28 @@ backend/migrations/
 
 ```mermaid
 erDiagram
+    users ||--o{ conversations : "拥有"
+    users ||--o{ resources : "上传"
+    users ||--o{ knowledge_mastery : "学习"
+    users ||--o{ quiz_attempts : "作答"
+    users ||--o{ wrong_book : "错题"
+    users ||--o{ exam_plans : "备考"
+    users ||--o{ courses : "课程"
+    users ||--o{ llm_evaluations : "评估"
+
+    users {
+        uuid id PK
+        varchar email UK
+        varchar password_hash
+        varchar display_name
+        timestamp created_at
+        timestamp updated_at
+    }
+
     conversations ||--o{ messages : "包含"
     conversations {
         uuid id PK
+        uuid user_id FK
         varchar title
         timestamp created_at
         timestamp updated_at
@@ -1010,18 +1172,19 @@ erDiagram
     knowledge_mastery ||--o{ knowledge_source_links : "concept"
     knowledge_mastery {
         uuid id PK
+        uuid user_id FK
         varchar concept UK
         float confidence
+        varchar bloom_level
+        float importance
+        smallint granularity_level
+        text description
         varchar error_type
         timestamp last_reviewed
         timestamp next_review
         float easiness_factor
         int interval_days
         int repetitions
-        varchar bloom_level
-        float importance
-        smallint granularity_level
-        text description
         float stability
         float difficulty
         int elapsed_days
@@ -1043,6 +1206,7 @@ erDiagram
 
     knowledge_source_links {
         uuid id PK
+        uuid user_id FK
         varchar concept
         varchar source_type
         uuid source_id
@@ -1052,6 +1216,7 @@ erDiagram
     resources ||--o{ courses : "生成"
     resources {
         uuid id PK
+        uuid user_id FK
         varchar source_type
         varchar title
         varchar original_filename
@@ -1065,9 +1230,9 @@ erDiagram
     }
 
     courses ||--o{ course_sections : "包含"
-    courses ||--o{ course_progress : "进度"
     courses {
         uuid id PK
+        uuid user_id FK
         uuid resource_id FK
         varchar title
         text summary
@@ -1079,6 +1244,7 @@ erDiagram
     course_sections {
         uuid id PK
         uuid course_id FK
+        uuid user_id FK
         varchar title
         text content
         int order_index
@@ -1086,18 +1252,11 @@ erDiagram
         text question_prompts
     }
 
-    course_progress {
-        uuid id PK
-        uuid course_id FK
-        uuid section_id FK
-        boolean completed
-        float mastery_score
-    }
-
     quiz_attempts ||--o{ wrong_book : "错题记录"
     quiz_attempts ||--o{ variant_questions : "变式题"
     quiz_attempts {
         uuid id PK
+        uuid user_id FK
         uuid course_id FK
         uuid section_id FK
         text question
@@ -1109,6 +1268,7 @@ erDiagram
 
     wrong_book {
         uuid id PK
+        uuid user_id FK
         uuid quiz_attempt_id FK
         varchar concept
         varchar error_type
@@ -1128,23 +1288,45 @@ erDiagram
         varchar difficulty
         boolean answered
         boolean is_correct
+        text user_answer
     }
 
     exam_plans {
         uuid id PK
+        uuid user_id FK
         varchar title
         date exam_date
         text_array concepts
         float acceleration_factor
         boolean active
     }
+
+    llm_evaluations {
+        uuid id PK
+        uuid user_id FK
+        uuid conversation_id FK
+        varchar eval_type
+        float score
+        jsonb details
+        timestamp created_at
+    }
 ```
 
-共 **12 张表**，覆盖对话、知识图谱、资料、课程、测验、错题、变式题、考试计划、来源关联全链路。
+共 **16+ 张表**，17 次迁移演进，覆盖用户、对话、知识图谱、资料、课程、测验、错题、变式题、考试计划、来源关联、LLM 评估全链路。
 
 ---
 
 ## API 接口文档
+
+> 除认证相关端点外，所有接口均需 `Authorization: Bearer <token>` Header。
+
+### 认证
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/auth/register` | 注册（email + password + display_name） |
+| `POST` | `/api/auth/login` | 登录，返回 JWT Token（7 天有效期） |
+| `GET` | `/api/auth/me` | 获取当前用户信息 |
 
 ### 系统
 
@@ -1158,7 +1340,7 @@ erDiagram
 |------|------|------|
 | `POST` | `/api/chat` | 发送消息（SSE 流式返回） |
 | `POST` | `/api/conversations` | 创建会话 |
-| `GET` | `/api/conversations` | 会话列表 |
+| `GET` | `/api/conversations` | 会话列表（当前用户） |
 | `GET` | `/api/conversations/:id` | 会话详情（含消息） |
 | `DELETE` | `/api/conversations/:id` | 删除会话 |
 
@@ -1166,8 +1348,10 @@ erDiagram
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/resources/upload` | 上传文件（PDF/TXT，最大 100MB） |
+| `GET` | `/api/resources` | 资料列表（当前用户） |
+| `POST` | `/api/resources/upload` | 上传文件（PDF/DOCX/PPTX/TXT，最大 100MB） |
 | `POST` | `/api/resources/import-url` | 导入 URL |
+| `DELETE` | `/api/resources/:id` | 删除资料 |
 
 ### 知识图谱
 
@@ -1185,17 +1369,17 @@ erDiagram
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `POST` | `/api/quiz/generate` | 生成题目（Bloom 分层） |
-| `POST` | `/api/quiz/submit` | 提交答案（AI 评分） |
+| `POST` | `/api/quiz/submit` | 提交答案（AI 评分，自动更新 FSRS） |
 | `POST` | `/api/quiz/variant` | 生成变式题 |
-| `POST` | `/api/quiz/anki-rate` | Anki 四按钮评分 |
-| `POST` | `/api/quiz/conversation` | 对话式考察 |
+| `POST` | `/api/quiz/anki-rate` | Anki 四按钮评分（直接更新 FSRS） |
+| `POST` | `/api/quiz/conversation` | 对话式考察（多轮） |
 
 ### 错题本
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/api/wrongbook` | 错题列表 |
-| `GET` | `/api/wrongbook/stats` | 错题统计 |
+| `GET` | `/api/wrongbook/stats` | 错题统计（8 种类型分布） |
 | `POST` | `/api/wrongbook/:id/review` | 标记已复习 |
 | `DELETE` | `/api/wrongbook/:id` | 删除错题 |
 
@@ -1203,14 +1387,14 @@ erDiagram
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/review/due` | 到期复习队列 |
+| `GET` | `/api/review/due` | 今日到期复习队列 |
 | `GET` | `/api/review/upcoming` | 未来复习日历 |
 
 ### 课程
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/resources/:id/generate-course` | 从资料生成课程 |
+| `POST` | `/api/resources/:id/generate-course` | 从资料生成章节课程 |
 | `GET` | `/api/courses` | 课程列表 |
 | `GET` | `/api/courses/:id` | 课程详情（含章节） |
 | `DELETE` | `/api/courses/:id` | 删除课程 |
@@ -1219,15 +1403,15 @@ erDiagram
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/dashboard/stats` | 统计概览 |
+| `GET` | `/api/dashboard/stats` | 统计概览（知识点数/对话数/测验数） |
 | `GET` | `/api/dashboard/heatmap` | 365 天学习热力图 |
-| `GET` | `/api/dashboard/mastery-distribution` | 掌握度分布 |
+| `GET` | `/api/dashboard/mastery-distribution` | 掌握度分布（已掌握/学习中/薄弱） |
 
 ### 记忆
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/memory/profile` | 长期学习画像 |
+| `GET` | `/api/memory/profile` | 长期学习画像（MEMORY.md） |
 | `GET` | `/api/memory/timeline` | 学习时间线 |
 | `GET` | `/api/memory/search` | 记忆搜索 |
 | `GET` | `/api/conversations/recent` | 最近对话（记忆页） |
@@ -1246,14 +1430,36 @@ erDiagram
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/daily-briefing` | 今日学习建议 |
+| `GET` | `/api/daily-briefing` | 今日学习建议（JSON 结构化返回） |
+
+### LLM 评估
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/evaluations/stats` | 评估统计（对话质量趋势） |
+| `POST` | `/api/evaluations` | 创建评估记录 |
 
 ### 设置
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/api/settings/provider` | 获取当前 LLM Provider |
-| `PUT` | `/api/settings/provider` | 切换 LLM Provider |
+| `PUT` | `/api/settings/provider` | 切换 LLM Provider（运行时热切换） |
+
+### Python AI 微服务（内部，Go 后端调用）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/parse` | 解析文档（PDF/DOCX/PPTX/TXT/MD） |
+| `POST` | `/parse-url` | 抓取网页正文 |
+| `POST` | `/embed` | 生成 256D 文本向量 |
+| `POST` | `/upsert` | 批量写入 Qdrant |
+| `POST` | `/search` | 向量相似搜索（Cosine） |
+| `POST` | `/extract` | LLM 知识点提取（自动分块合并） |
+| `POST` | `/knowledge/embed` | 知识点向量写入 |
+| `POST` | `/knowledge/search` | 知识点语义搜索 |
+| `POST` | `/knowledge/confusable` | 易混淆概念检测 |
+| `GET` | `/health` | AI 微服务健康检查 |
 
 ---
 
@@ -1264,10 +1470,12 @@ erDiagram
 | 2026-04-12 | feat | 移动端全面补全：ResourcesScreen / ReviewScreen + Session / QuizScreen（三模式）/ KnowledgeScreen（SVG 力导向图）/ WrongbookScreen / MemoryScreen / SettingsScreen / DailyBriefing 组件 |
 | 2026-04-12 | feat | 移动端导航架构升级：底部 Tab（聊天/复习/测验/资料/我的）+ 侧边抽屉（数据/图谱/错题/历程） |
 | 2026-04-12 | feat | 移动端基础设施完善：types.ts + api.ts 补全所有缺失接口（Review/Quiz/Wrongbook/Settings/ExamPlan/Memory） |
+| 2026-04-12 | feat | 迁移 016-017：课程表、来源关联表、LLM 评估表完成用户隔离 |
 | 2026-04-11 | feat | P2 完成：知识点向量化、资料全链路关联、教学风格自适应/可选、交错复习 |
 | 2026-04-11 | feat | P1 全部完成：Bloom 出题、晨间简报、仪表盘热力图、复习体验、考试模式、对话考察等 |
+| 2026-04-11 | feat | 用户系统上线：注册/登录/JWT 鉴权 + 9 张表多用户数据隔离（迁移 013-015） |
 | 2026-04-10 | feat | P0 全部完成：FSRS 迁移、苏格拉底升级、诊断精细化、注入防护、变式题、错题本 |
-| 2026-04-10 | feat | 集成 Codex Provider，支持设置页热切换 LLM |
+| 2026-04-10 | feat | 集成 Codex Provider，支持 OAuth Token 自动刷新，设置页热切换 LLM |
 | 2026-04-09 | feat | 知识图谱 API + 可视化、Dreaming Sweep、记忆页 |
 | 2026-04-09 | feat | 资料上传 + AI 解析 + 知识点提取 + 课程系统 |
 | 2026-04-09 | feat | SSE 流式对话 + 会话持久化 + Orchestrator 多 Agent 编排 |
