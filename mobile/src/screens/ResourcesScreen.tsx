@@ -17,6 +17,8 @@ import { useNavigation } from "@react-navigation/native";
 import { colors } from "../theme/colors";
 import * as api from "../lib/api";
 import type { Resource, ResourceUploadResult } from "../lib/types";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../navigation/AppNavigator";
 
 // ===== 常量 =====
 
@@ -45,7 +47,7 @@ const FILE_TYPE_ICONS: Record<string, string> = {
 // ===== 主组件 =====
 
 export function ResourcesScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   // Tab 状态
   const [activeTab, setActiveTab] = useState<InputTab>("file");
@@ -223,6 +225,22 @@ export function ResourcesScreen() {
       screen: "聊天",
       params: { prompt },
     });
+  };
+
+  // ===== 生成课程 =====
+
+  const [generatingCourseId, setGeneratingCourseId] = useState<string | null>(null);
+
+  const handleGenerateCourse = async (resourceId: string) => {
+    try {
+      setGeneratingCourseId(resourceId);
+      const data = await api.generateCourse(resourceId);
+      navigation.navigate("CourseDetail", { courseId: data.course.id });
+    } catch (e: any) {
+      Alert.alert("生成失败", e?.message ?? "课程生成失败，请稍后重试");
+    } finally {
+      setGeneratingCourseId(null);
+    }
   };
 
   // ===== 过滤资源 =====
@@ -496,6 +514,8 @@ export function ResourcesScreen() {
             resource={item}
             onDelete={() => handleDelete(item.id, item.filename)}
             onLearn={() => handleStartLearning(item.id)}
+            onGenerateCourse={() => handleGenerateCourse(item.id)}
+            generatingCourse={generatingCourseId === item.id}
           />
         )}
       />
@@ -520,10 +540,14 @@ function ResourceCard({
   resource,
   onDelete,
   onLearn,
+  onGenerateCourse,
+  generatingCourse,
 }: {
   resource: Resource;
   onDelete: () => void;
   onLearn: () => void;
+  onGenerateCourse: () => void;
+  generatingCourse: boolean;
 }) {
   const ext = resource.filename.split(".").pop()?.toLowerCase() ?? "";
   const typeIcon = FILE_TYPE_ICONS[ext] ?? "FILE";
@@ -569,6 +593,17 @@ function ResourceCard({
       <View style={styles.resourceActions}>
         <TouchableOpacity style={styles.learnSmallButton} onPress={onLearn}>
           <Text style={styles.learnSmallButtonText}>基于此资料学习</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.courseButton, generatingCourse && styles.courseButtonDisabled]}
+          onPress={onGenerateCourse}
+          disabled={generatingCourse}
+        >
+          {generatingCourse ? (
+            <ActivityIndicator size="small" color={colors.brand} />
+          ) : (
+            <Text style={styles.courseButtonText}>生成课程</Text>
+          )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
           <Text style={styles.deleteButtonText}>删除</Text>
@@ -912,6 +947,21 @@ const styles = StyleSheet.create({
   },
   learnSmallButtonText: {
     color: colors.white,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  courseButton: {
+    backgroundColor: "rgba(198, 122, 74, 0.12)",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: "center",
+  },
+  courseButtonDisabled: {
+    opacity: 0.6,
+  },
+  courseButtonText: {
+    color: colors.brand,
     fontSize: 13,
     fontWeight: "600",
   },

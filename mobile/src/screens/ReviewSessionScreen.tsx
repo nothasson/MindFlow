@@ -122,7 +122,7 @@ export function ReviewSessionScreen() {
       setStats((prev) => ({
         ...prev,
         total: prev.total + 1,
-        correct: prev.correct + (result.correct ? 1 : 0),
+        correct: prev.correct + (result.is_correct ? 1 : 0),
         scores: [...prev.scores, result.score],
       }));
       setPhase("rating");
@@ -340,7 +340,7 @@ export function ReviewSessionScreen() {
               style={[
                 styles.resultCard,
                 {
-                  borderColor: gradeResult.correct
+                  borderColor: gradeResult.is_correct
                     ? colors.success
                     : colors.error,
                 },
@@ -348,25 +348,25 @@ export function ReviewSessionScreen() {
             >
               <View style={styles.resultHeader}>
                 <Text style={styles.resultIcon}>
-                  {gradeResult.correct ? "✅" : "❌"}
+                  {gradeResult.is_correct ? "✅" : "❌"}
                 </Text>
                 <Text
                   style={[
                     styles.resultTitle,
                     {
-                      color: gradeResult.correct
+                      color: gradeResult.is_correct
                         ? colors.success
                         : colors.error,
                     },
                   ]}
                 >
-                  {gradeResult.correct ? "回答正确" : "回答有误"}
+                  {gradeResult.is_correct ? "回答正确" : "回答有误"}
                 </Text>
                 <View
                   style={[
                     styles.scoreBadge,
                     {
-                      backgroundColor: gradeResult.correct
+                      backgroundColor: gradeResult.is_correct
                         ? colors.success
                         : colors.error,
                     },

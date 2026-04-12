@@ -417,15 +417,15 @@ function TraditionalMode({
             <View
               style={[
                 styles.resultBanner,
-                result.correct ? styles.resultCorrect : styles.resultWrong,
+                result.is_correct ? styles.resultCorrect : styles.resultWrong,
               ]}
             >
               <Text style={styles.resultIcon}>
-                {result.correct ? "✓" : "✗"}
+                {result.is_correct ? "✓" : "✗"}
               </Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.resultLabel}>
-                  {result.correct ? "回答正确" : "回答错误"}
+                  {result.is_correct ? "回答正确" : "回答错误"}
                 </Text>
                 <Text style={styles.resultScore}>
                   得分：{result.score} / 100

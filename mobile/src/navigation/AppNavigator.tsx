@@ -20,6 +20,7 @@ import { KnowledgeScreen } from "../screens/KnowledgeScreen";
 import { WrongbookScreen } from "../screens/WrongbookScreen";
 import { MemoryScreen } from "../screens/MemoryScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
+import { CourseDetailScreen } from "../screens/CourseDetailScreen";
 import { DrawerContent } from "../components/DrawerContent";
 import { colors } from "../theme/colors";
 
@@ -27,6 +28,7 @@ export type RootStackParamList = {
   Login: undefined;
   Main: undefined;
   ReviewSession: { concept?: string } | undefined;
+  CourseDetail: { courseId: string } | undefined;
 };
 
 export type MainTabParamList = {
@@ -145,6 +147,7 @@ export function AppNavigator() {
           <>
             <Stack.Screen name="Main" component={MainDrawer} />
             <Stack.Screen name="ReviewSession" component={ReviewSessionScreen} />
+            <Stack.Screen name="CourseDetail" component={CourseDetailScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

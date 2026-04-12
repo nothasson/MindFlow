@@ -4,6 +4,8 @@ import type {
   ChatRequest,
   ChatResponse,
   Conversation,
+  Course,
+  CourseSection,
   DailyBriefing,
   DashboardStats,
   ExamPlan,
@@ -522,4 +524,42 @@ export async function searchMemory(
     { headers }
   );
   return data.results;
+}
+
+// ===== 课程 API =====
+
+export async function getCourses(): Promise<Course[]> {
+  const headers = await authHeaders();
+  const data = await request<{ courses: Course[] }>("/api/courses", {
+    headers,
+  });
+  return data.courses;
+}
+
+export async function getCourse(
+  id: string
+): Promise<{ course: Course; sections: CourseSection[] }> {
+  const headers = await authHeaders();
+  return request(`/api/courses/${id}`, { headers });
+}
+
+export async function deleteCourse(id: string): Promise<void> {
+  const headers = await authHeaders();
+  await request(`/api/courses/${id}`, { method: "DELETE", headers });
+}
+
+export async function generateCourse(
+  resourceId: string,
+  difficulty?: string
+): Promise<{ course: Course; sections: CourseSection[] }> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
+  const body: Record<string, string> = {};
+  if (difficulty) {
+    body.difficulty = difficulty;
+  }
+  return request(`/api/resources/${resourceId}/generate-course`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
 }

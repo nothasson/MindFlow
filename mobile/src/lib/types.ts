@@ -157,9 +157,10 @@ export interface QuizQuestion {
 }
 
 export interface QuizSubmitResult {
-  correct: boolean;
+  is_correct: boolean;
   score: number;
   explanation: string;
+  concept?: string;
   error_type?: string;
 }
 
@@ -208,9 +209,8 @@ export interface WrongBookEntry {
 }
 
 export interface WrongBookStats {
-  total: number;
-  unreviewed: number;
-  by_error_type: Record<string, number>;
+  error_type: string;
+  count: number;
 }
 
 // ===== 设置 =====
@@ -264,6 +264,32 @@ export interface CalendarDay {
 export interface MemorySearchResult {
   source: string;
   content: string;
+}
+
+// ===== 课程 =====
+
+export interface Course {
+  id: string;
+  resource_id?: string;
+  title: string;
+  summary: string;
+  difficulty_level: string;
+  style: string;
+  section_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CourseSection {
+  id: string;
+  course_id: string;
+  title: string;
+  summary: string;
+  content: string;
+  order_index: number;
+  learning_objectives: string;
+  question_prompts: string;
+  created_at: string;
 }
 
 // ===== 资源 =====
