@@ -34,15 +34,21 @@ func (r *SourceLinkRepo) CreateLink(ctx context.Context, concept, sourceType str
 	return err
 }
 
-// GetLinksByConcept 查询某个知识点的所有来源
-func (r *SourceLinkRepo) GetLinksByConcept(ctx context.Context, concept string) ([]model.KnowledgeSourceLink, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, concept, source_type, source_id, page_or_position, created_at
+// GetLinksByConcept 查询某个知识点的所有来源（userID 可选，用于按用户过滤）
+func (r *SourceLinkRepo) GetLinksByConcept(ctx context.Context, concept string, userID ...*uuid.UUID) ([]model.KnowledgeSourceLink, error) {
+	query := `SELECT id, concept, source_type, source_id, page_or_position, created_at
 		 FROM knowledge_source_links
-		 WHERE concept = $1
-		 ORDER BY created_at DESC`,
-		concept,
-	)
+		 WHERE concept = $1`
+	args := []interface{}{concept}
+
+	if len(userID) > 0 && userID[0] != nil {
+		query += ` AND user_id = $2`
+		args = append(args, *userID[0])
+	}
+
+	query += ` ORDER BY created_at DESC`
+
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
