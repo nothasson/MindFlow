@@ -5,18 +5,7 @@ import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-/* ─── 类型 ─── */
-
-interface ReviewItem {
-  id: string;
-  concept: string;
-  confidence: number;
-  interval_days: number;
-  next_review: string;
-}
+import { getReviewDue, generateQuiz as apiGenerateQuiz, submitQuiz, type ReviewItem, type QuizSubmitResult } from "@/lib/api";
 
 interface QuizQuestion {
   id: string;
@@ -72,8 +61,7 @@ export default function ReviewSessionPage() {
 
   // 加载到期复习项
   useEffect(() => {
-    fetch(`${API_URL}/api/review/due`)
-      .then((r) => r.json())
+    getReviewDue()
       .then((d) => {
         const list: ReviewItem[] = d.items ?? [];
         setItems(list);
@@ -105,13 +93,7 @@ export default function ReviewSessionPage() {
       setQuizQuestions([]);
       setCurrentQuestionIndex(0);
       try {
-        const res = await fetch(`${API_URL}/api/quiz/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ concept }),
-        });
-        if (!res.ok) throw new Error("出题失败");
-        const data = await res.json();
+        const data = await apiGenerateQuiz({ concept });
         // API 返回 {concept, questions} — questions 是 Markdown 文本
         const questionText = typeof data.questions === "string" ? data.questions : `请解释「${concept}」的核心概念。`;
         // 拆分成单题数组
@@ -158,25 +140,19 @@ export default function ReviewSessionPage() {
   const handleSubmit = async () => {
     if (!quiz || !answer.trim()) return;
     setSubmitting(true);
-    try {
-      const res = await fetch(`${API_URL}/api/quiz/submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      try {
+        const data = await submitQuiz({
           concept: quiz.concept,
           question: quiz.question.slice(0, 500), // 只发送当前单题
           answer: answer.trim(),
-        }),
-      });
-      if (!res.ok) throw new Error("提交失败");
-      const data = await res.json();
-      // 后端返回 {is_correct, score, explanation, concept}
-      const submitResult: SubmitResult = {
-        correct: data.is_correct ?? false,
-        score: data.score ?? 0,
-        explanation: data.explanation ?? "",
-        correct_answer: "",
-      };
+        });
+        // 后端返回 {is_correct, score, explanation, concept}
+        const submitResult: SubmitResult = {
+          correct: data.is_correct ?? false,
+          score: data.score ?? 0,
+          explanation: data.explanation ?? "",
+          correct_answer: "",
+        };
       setResult(submitResult);
       if (submitResult.correct) {
         setCorrectCount((c) => c + 1);

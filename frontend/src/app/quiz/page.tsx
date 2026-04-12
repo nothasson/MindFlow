@@ -7,37 +7,27 @@ import Link from "next/link";
 import { MainShell } from "@/components/layout/MainShell";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { ChatInput } from "@/components/chat/ChatInput";
+import {
+  getDashboardStats,
+  getWrongBook,
+  getWrongBookStats,
+  reviewWrongBook,
+  deleteWrongBook,
+  generateQuiz as apiGenerateQuiz,
+  submitQuiz,
+  quizConversation,
+  ankiRate,
+  type WrongBookEntry,
+  type WrongBookStat,
+  type QuizSubmitResult,
+} from "@/lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-interface WeakPoint {
-  concept: string;
-  confidence: number;
-}
+type WeakPoint = { concept: string; confidence: number };
 
 // 对话考察消息
 interface ConvMessage {
   role: "ai" | "user";
   content: string;
-}
-
-// 错题本相关类型
-interface WrongBookEntry {
-  id: string;
-  quiz_attempt_id: string;
-  concept: string;
-  error_type: string;
-  question: string;
-  user_answer: string;
-  reviewed: boolean;
-  review_count: number;
-  next_review?: string;
-  created_at: string;
-}
-
-interface WrongBookStat {
-  error_type: string;
-  count: number;
 }
 
 const ERROR_TYPE_LABELS: Record<string, string> = {
@@ -135,10 +125,8 @@ export default function QuizPage() {
     }
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/api/dashboard/stats`);
-        if (!res.ok) throw new Error("获取失败");
-        const data = await res.json();
-        const points: WeakPoint[] = (data.weak_points ?? []).map((p: { concept: string; confidence: number }) => ({
+        const data = await getDashboardStats();
+        const points: WeakPoint[] = (data.weak_points ?? []).map((p) => ({
           concept: p.concept,
           confidence: p.confidence,
         }));
@@ -159,18 +147,12 @@ export default function QuizPage() {
   const fetchWrongBook = useCallback(async () => {
     setWbLoading(true);
     try {
-      const [entriesRes, statsRes] = await Promise.all([
-        fetch(`${API_URL}/api/wrongbook`),
-        fetch(`${API_URL}/api/wrongbook/stats`),
+      const [entriesData, statsData] = await Promise.all([
+        getWrongBook(),
+        getWrongBookStats(),
       ]);
-      if (entriesRes.ok) {
-        const data = await entriesRes.json();
-        setWbEntries(data.entries ?? []);
-      }
-      if (statsRes.ok) {
-        const data = await statsRes.json();
-        setWbStats(data.stats ?? []);
-      }
+      setWbEntries(entriesData.entries ?? []);
+      setWbStats(statsData.stats ?? []);
       setWbLoaded(true);
     } catch {
       // 静默失败
@@ -198,13 +180,13 @@ export default function QuizPage() {
 
   // 错题本：标记已复习
   const wbMarkReviewed = async (id: string) => {
-    await fetch(`${API_URL}/api/wrongbook/${id}/review`, { method: "POST" });
+    await reviewWrongBook(id);
     fetchWrongBook();
   };
 
   // 错题本：删除
   const wbDeleteEntry = async (id: string) => {
-    await fetch(`${API_URL}/api/wrongbook/${id}`, { method: "DELETE" });
+    await deleteWrongBook(id);
     fetchWrongBook();
   };
 
@@ -220,13 +202,7 @@ export default function QuizPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/quiz/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ concept }),
-      });
-      if (!res.ok) throw new Error("出题失败");
-      const data = await res.json();
+      const data = await apiGenerateQuiz({ concept });
       const parsed = parseQuestions(data.questions);
       setQuestions(parsed);
       setCurrentIndex(0);
@@ -244,17 +220,11 @@ export default function QuizPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/api/quiz/submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          concept,
-          question: questions[currentIndex]?.slice(0, 500) ?? "",
-          answer,
-        }),
+      const data = await submitQuiz({
+        concept,
+        question: questions[currentIndex]?.slice(0, 500) ?? "",
+        answer,
       });
-      if (!res.ok) throw new Error("提交失败");
-      const data = await res.json();
       setResult(data);
       setScores((prev) => [...prev, data.score]);
     } catch (err) {
@@ -304,13 +274,7 @@ export default function QuizPage() {
     // 发起第一轮（空 message，触发 AI 出第一个问题）
     setConvLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/quiz/conversation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ concept, message: "", session_id: sid }),
-      });
-      if (!res.ok) throw new Error("启动对话考察失败");
-      const data = await res.json();
+      const data = await quizConversation({ concept, message: "", session_id: sid });
       setConvMessages([{ role: "ai", content: data.reply }]);
       setConvRound(data.round);
       setConvFinished(data.finished);
@@ -331,17 +295,11 @@ export default function QuizPage() {
     setConvLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/quiz/conversation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          concept,
-          message: userMsg,
-          session_id: convSessionId,
-        }),
+      const data = await quizConversation({
+        concept,
+        message: userMsg,
+        session_id: convSessionId,
       });
-      if (!res.ok) throw new Error("发送失败");
-      const data = await res.json();
       setConvMessages((prev) => [...prev, { role: "ai", content: data.reply }]);
       setConvRound(data.round);
       setConvFinished(data.finished);
@@ -606,18 +564,12 @@ export default function QuizPage() {
                         setConvLoading(true);
                         setError(null);
                         try {
-                          const res = await fetch(`${API_URL}/api/quiz/conversation`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              concept,
-                              message: content,
-                              round: convRound,
-                              history: convMessages.map((m) => `${m.role === "ai" ? "导师" : "学生"}：${m.content}`).join("\n"),
-                            }),
+                          const data = await quizConversation({
+                            concept,
+                            message: content,
+                            round: convRound,
+                            history: convMessages.map((m) => `${m.role === "ai" ? "导师" : "学生"}：${m.content}`).join("\n"),
                           });
-                          if (!res.ok) throw new Error("对话失败");
-                          const data = await res.json();
                           setConvMessages((prev) => [...prev, { role: "ai", content: data.reply }]);
                           setConvRound(data.round);
                           if (data.finished) setConvFinished(true);
@@ -701,13 +653,7 @@ export default function QuizPage() {
                           setAnkiLoading(true);
                           setError(null);
                           try {
-                            const res = await fetch(`${API_URL}/api/quiz/generate`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ concept }),
-                            });
-                            if (!res.ok) throw new Error("出题失败");
-                            const data = await res.json();
+                            const data = await apiGenerateQuiz({ concept });
                             const parsed = parseQuestions(data.questions);
                             setAnkiMode(true);
                             setQuestions(parsed);
@@ -862,11 +808,7 @@ export default function QuizPage() {
                           onClick={async () => {
                             // 调用 Anki 评分 API
                             try {
-                              await fetch(`${API_URL}/api/quiz/anki-rate`, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ concept, rating: btn.rating }),
-                              });
+                              await ankiRate({ concept, rating: btn.rating });
                             } catch { /* 静默 */ }
                             setAnkiScores((prev) => [...prev, btn.rating]);
                             // 下一张卡

@@ -4,33 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-interface Course {
-  id: string;
-  title: string;
-  summary: string;
-  difficulty_level: string;
-  section_count: number;
-  created_at: string;
-}
-
-interface Section {
-  id: string;
-  title: string;
-  summary: string;
-  content: string;
-  order_index: number;
-  learning_objectives: string;
-  question_prompts: string;
-}
+import { getCourse, type Course, type CourseSection } from "@/lib/api";
 
 export default function CoursePage() {
   const params = useParams();
   const courseId = params?.id as string;
 
   const [course, setCourse] = useState<Course | null>(null);
-  const [sections, setSections] = useState<Section[]>([]);
+  const [sections, setSections] = useState<CourseSection[]>([]);
   const [activeSection, setActiveSection] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,9 +20,7 @@ export default function CoursePage() {
     if (!courseId) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/courses/${courseId}`);
-      if (!res.ok) throw new Error("加载课程失败");
-      const data = await res.json();
+      const data = await getCourse(courseId);
       setCourse(data.course);
       setSections(data.sections || []);
     } catch (err) {

@@ -4,10 +4,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MainShell } from "@/components/layout/MainShell";
-import { getKnowledgeGraph, getKnowledgeSources } from "@/lib/api";
+import { getKnowledgeGraph, getKnowledgeSources, deleteConcept } from "@/lib/api";
 import type { KnowledgeNode, KnowledgeEdge, KnowledgeSourceLink } from "@/lib/types";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 interface SimNode extends KnowledgeNode {
   x: number;
@@ -334,7 +332,7 @@ export default function KnowledgePage() {
         ctx.restore();
 
         // --- 绘制文字 ---
-        if (!isDimmed || true) {
+        if (!isDimmed) {
           ctx.save();
           ctx.globalAlpha = isDimmed ? 0.15 : 1;
           ctx.fillStyle = "#ffffff";
@@ -631,7 +629,7 @@ export default function KnowledgePage() {
               onClick={async () => {
                 if (!confirm(`确定删除知识点「${selected.concept}」？`)) return;
                 try {
-                  await fetch(`${API_URL}/api/knowledge/concept/${encodeURIComponent(selected.concept)}`, { method: "DELETE" });
+                  await deleteConcept(selected.concept);
                   setSelected(null);
                   // 刷新数据
                   const data = await getKnowledgeGraph();

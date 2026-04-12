@@ -4,10 +4,8 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
-import { importUrlResource, uploadResource } from "@/lib/api";
+import { importUrlResource, uploadResource, generateCourse } from "@/lib/api";
 import type { ResourceUploadResult } from "@/lib/types";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export default function ResourcesPage() {
   const [uploading, setUploading] = useState(false);
@@ -251,13 +249,7 @@ export default function ResourcesPage() {
                   onClick={async () => {
                     setGenerating(true);
                     try {
-                      const res = await fetch(`${API_URL}/api/resources/${result.resource_id}/generate-course`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ difficulty: "beginner" }),
-                      });
-                      if (!res.ok) throw new Error("生成失败");
-                      const data = await res.json();
+                      const data = await generateCourse(result.resource_id, "beginner");
                       if (data.course?.id) {
                         window.location.href = `/courses/${data.course.id}`;
                       }

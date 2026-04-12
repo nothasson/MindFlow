@@ -4,41 +4,8 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-interface WeakPoint {
-  concept: string;
-  confidence: number;
-}
-
-interface TrendDay {
-  date: string;
-  count: number;
-}
-
-interface DashboardStats {
-  total_conversations: number;
-  total_messages: number;
-  total_resources: number;
-  total_courses: number;
-  total_days: number;
-  streak: number;
-  weak_points: WeakPoint[];
-  trend: TrendDay[];
-}
-
-interface HeatmapEntry {
-  date: string;
-  count: number;
-}
-
-interface MasteryDistribution {
-  mastered: number;
-  learning: number;
-  weak: number;
-  total: number;
-}
+import { getDashboardStats, getDashboardHeatmap, getMasteryDistribution } from "@/lib/api";
+import type { DashboardStats, HeatmapEntry, MasteryDistribution, WeakPoint } from "@/lib/api";
 
 // ========== 热力图组件 ==========
 
@@ -306,18 +273,15 @@ export default function DashboardPage() {
   const [mastery, setMastery] = useState<MasteryDistribution | null>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/dashboard/stats`)
-      .then((r) => r.json())
+    getDashboardStats()
       .then((d) => setStats(d))
       .catch(() => {});
 
-    fetch(`${API_URL}/api/dashboard/heatmap`)
-      .then((r) => r.json())
+    getDashboardHeatmap()
       .then((d) => setHeatmap(d.heatmap ?? []))
       .catch(() => {});
 
-    fetch(`${API_URL}/api/dashboard/mastery-distribution`)
-      .then((r) => r.json())
+    getMasteryDistribution()
       .then((d) => setMastery(d))
       .catch(() => {});
   }, []);

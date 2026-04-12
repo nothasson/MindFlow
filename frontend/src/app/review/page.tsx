@@ -4,16 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-interface ReviewItem {
-  id: string;
-  concept: string;
-  confidence: number;
-  interval_days: number;
-  next_review: string;
-}
+import { getReviewDue, getReviewUpcoming, type ReviewItem } from "@/lib/api";
 
 const daysOfWeek = ["一", "二", "三", "四", "五", "六", "日"];
 
@@ -40,13 +31,11 @@ export default function ReviewPage() {
   const monthName = `${now.getFullYear()} 年 ${now.getMonth() + 1} 月`;
 
   useEffect(() => {
-    fetch(`${API_URL}/api/review/due`)
-      .then((r) => r.json())
+    getReviewDue()
       .then((d) => setDueItems(d.items || []))
       .catch(() => {});
 
-    fetch(`${API_URL}/api/review/upcoming`)
-      .then((r) => r.json())
+    getReviewUpcoming()
       .then((d) => setUpcomingItems(d.items || []))
       .catch(() => {});
   }, []);

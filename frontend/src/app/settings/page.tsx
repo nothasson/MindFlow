@@ -2,29 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { MainShell } from "@/components/layout/MainShell";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-interface ProviderInfo {
-  id: string;
-  name: string;
-  model: string;
-}
-
-interface ProviderSettings {
-  active: string;
-  providers: ProviderInfo[];
-}
-
-interface ExamPlan {
-  id: string;
-  title: string;
-  exam_date: string;
-  concepts: string[];
-  acceleration_factor: number;
-  active: boolean;
-  created_at: string;
-}
+import {
+  getProvider,
+  updateProvider,
+  getExamPlans,
+  createExamPlan,
+  deleteExamPlan,
+  getKnowledgeGraph,
+  type ProviderSettings,
+  type ExamPlan,
+} from "@/lib/api";
+import type { KnowledgeGraph } from "@/lib/types";
 
 interface KnowledgeConcept {
   name: string;
@@ -78,9 +66,7 @@ export default function SettingsPage() {
 
   const fetchSettings = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/settings/provider`);
-      if (!res.ok) throw new Error("获取设置失败");
-      const data: ProviderSettings = await res.json();
+      const data = await getProvider();
       setSettings(data);
       setError(null);
     } catch {
@@ -98,9 +84,7 @@ export default function SettingsPage() {
   const fetchExamPlans = useCallback(async () => {
     setExamLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/exam-plans`);
-      if (!res.ok) throw new Error("获取考试计划失败");
-      const data = await res.json();
+      const data = await getExamPlans();
       setExamPlans(data.plans ?? []);
     } catch {
       // 静默失败
@@ -111,12 +95,10 @@ export default function SettingsPage() {
 
   const fetchConcepts = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/knowledge/graph`);
-      if (!res.ok) return;
-      const data = await res.json();
+      const data: KnowledgeGraph = await getKnowledgeGraph();
       const concepts: KnowledgeConcept[] = (data.nodes ?? []).map(
-        (n: { name: string; confidence?: number }) => ({
-          name: n.name,
+        (n: { concept: string; confidence?: number }) => ({
+          name: n.concept,
           confidence: n.confidence ?? 0,
         })
       );
@@ -137,15 +119,7 @@ export default function SettingsPage() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch(`${API_URL}/api/settings/provider`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: providerId }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error || "切换失败");
-      }
+      await updateProvider({ provider: providerId });
       setSettings((prev) => (prev ? { ...prev, active: providerId } : prev));
       const name = settings.providers.find((p) => p.id === providerId)?.name ?? providerId;
       setSuccess(`已切换到 ${name}`);
@@ -162,17 +136,12 @@ export default function SettingsPage() {
     if (!examTitle || !examDate) return;
     setExamCreating(true);
     try {
-      const res = await fetch(`${API_URL}/api/exam-plans`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: examTitle,
-          exam_date: examDate,
-          concepts: examConcepts,
-          acceleration_factor: 1.5,
-        }),
+      await createExamPlan({
+        title: examTitle,
+        exam_date: examDate,
+        concepts: examConcepts,
+        acceleration_factor: 1.5,
       });
-      if (!res.ok) throw new Error("创建失败");
       setExamTitle("");
       setExamDate("");
       setExamConcepts([]);
@@ -189,7 +158,7 @@ export default function SettingsPage() {
   // 删除考试计划
   const handleDeleteExam = async (id: string) => {
     try {
-      await fetch(`${API_URL}/api/exam-plans/${id}`, { method: "DELETE" });
+      await deleteExamPlan(id);
       fetchExamPlans();
     } catch {
       // 静默失败

@@ -354,3 +354,379 @@ export async function getKnowledgeSources(concept: string): Promise<KnowledgeSou
   const data = (await response.json()) as { concept: string; sources: KnowledgeSourceLink[] };
   return data.sources;
 }
+
+// ===== 错题本 API =====
+
+/** 获取错题列表 */
+export async function getWrongBook(): Promise<{ entries: WrongBookEntry[] }> {
+  const response = await fetch(`${API_URL}/api/wrongbook`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取错题本失败");
+  return response.json();
+}
+
+/** 获取错题统计 */
+export async function getWrongBookStats(): Promise<{ stats: WrongBookStat[] }> {
+  const response = await fetch(`${API_URL}/api/wrongbook/stats`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取错题统计失败");
+  return response.json();
+}
+
+/** 标记错题已复习 */
+export async function reviewWrongBook(id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/wrongbook/${id}/review`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error("标记复习失败");
+}
+
+/** 删除错题 */
+export async function deleteWrongBook(id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/wrongbook/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error("删除错题失败");
+}
+
+// ===== 仪表盘 API =====
+
+/** 获取仪表盘统计数据 */
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const response = await fetch(`${API_URL}/api/dashboard/stats`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取统计数据失败");
+  return response.json();
+}
+
+/** 获取学习热力图数据 */
+export async function getDashboardHeatmap(): Promise<{ heatmap: HeatmapEntry[] }> {
+  const response = await fetch(`${API_URL}/api/dashboard/heatmap`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取热力图失败");
+  return response.json();
+}
+
+/** 获取掌握度分布 */
+export async function getMasteryDistribution(): Promise<MasteryDistribution> {
+  const response = await fetch(`${API_URL}/api/dashboard/mastery-distribution`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取掌握度分布失败");
+  return response.json();
+}
+
+// ===== 学习历程 API =====
+
+/** 获取最近对话 */
+export async function getRecentConversations(): Promise<{ conversations: ConvSummary[] }> {
+  const response = await fetch(`${API_URL}/api/conversations/recent`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取最近对话失败");
+  return response.json();
+}
+
+/** 获取最近知识点 */
+export async function getRecentKnowledge(): Promise<KnowledgeStats> {
+  const response = await fetch(`${API_URL}/api/knowledge/recent`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取知识点失败");
+  return response.json();
+}
+
+/** 获取日历统计数据 */
+export async function getCalendarStats(): Promise<{ days: CalendarDay[] }> {
+  const response = await fetch(`${API_URL}/api/stats/calendar`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取日历统计失败");
+  return response.json();
+}
+
+/** 搜索记忆 */
+export async function searchMemory(q: string): Promise<{ results: { source: string; content: string }[] }> {
+  const response = await fetch(`${API_URL}/api/memory/search?q=${encodeURIComponent(q)}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("搜索失败");
+  return response.json();
+}
+
+// ===== 设置 API =====
+
+/** 获取模型提供方设置 */
+export async function getProvider(): Promise<ProviderSettings> {
+  const response = await fetch(`${API_URL}/api/settings/provider`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取设置失败");
+  return response.json();
+}
+
+/** 更新模型提供方 */
+export async function updateProvider(data: { provider: string }): Promise<void> {
+  const response = await fetch(`${API_URL}/api/settings/provider`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || "切换失败");
+  }
+}
+
+/** 获取考试计划列表 */
+export async function getExamPlans(): Promise<{ plans: ExamPlan[] }> {
+  const response = await fetch(`${API_URL}/api/exam-plans`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取考试计划失败");
+  return response.json();
+}
+
+/** 创建考试计划 */
+export async function createExamPlan(data: {
+  title: string;
+  exam_date: string;
+  concepts: string[];
+  acceleration_factor?: number;
+}): Promise<void> {
+  const response = await fetch(`${API_URL}/api/exam-plans`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("创建考试计划失败");
+}
+
+/** 删除考试计划 */
+export async function deleteExamPlan(id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/exam-plans/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error("删除考试计划失败");
+}
+
+// ===== 知识点 API（补充） =====
+
+/** 删除知识点 */
+export async function deleteConcept(concept: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/knowledge/concept/${encodeURIComponent(concept)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error("删除知识点失败");
+}
+
+// ===== 资料 API（补充） =====
+
+/** 生成章节课程 */
+export async function generateCourse(resourceId: string, difficulty?: string): Promise<{ course: { id: string } }> {
+  const response = await fetch(`${API_URL}/api/resources/${resourceId}/generate-course`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ difficulty: difficulty ?? "beginner" }),
+  });
+  if (!response.ok) throw new Error("生成课程失败");
+  return response.json();
+}
+
+// ===== 复习 API =====
+
+/** 获取到期复习项 */
+export async function getReviewDue(): Promise<{ items: ReviewItem[] }> {
+  const response = await fetch(`${API_URL}/api/review/due`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取复习项失败");
+  return response.json();
+}
+
+/** 获取即将到期复习项 */
+export async function getReviewUpcoming(): Promise<{ items: ReviewItem[] }> {
+  const response = await fetch(`${API_URL}/api/review/upcoming`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取复习项失败");
+  return response.json();
+}
+
+// ===== 测验 API =====
+
+/** 生成测验题目 */
+export async function generateQuiz(data: { concept: string }): Promise<{ questions: string; concept?: string }> {
+  const response = await fetch(`${API_URL}/api/quiz/generate`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("出题失败");
+  return response.json();
+}
+
+/** 提交测验答案 */
+export async function submitQuiz(data: { concept: string; question: string; answer: string }): Promise<QuizSubmitResult> {
+  const response = await fetch(`${API_URL}/api/quiz/submit`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("提交失败");
+  return response.json();
+}
+
+/** 对话考察 */
+export async function quizConversation(data: {
+  concept: string;
+  message: string;
+  session_id?: string;
+  round?: number;
+  history?: string;
+}): Promise<{ reply: string; round: number; finished: boolean }> {
+  const response = await fetch(`${API_URL}/api/quiz/conversation`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("对话考察失败");
+  return response.json();
+}
+
+/** Anki 评分 */
+export async function ankiRate(data: { concept: string; rating: number }): Promise<void> {
+  const response = await fetch(`${API_URL}/api/quiz/anki-rate`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("评分失败");
+}
+
+// ===== 课程 API =====
+
+/** 获取课程详情 */
+export async function getCourse(id: string): Promise<{ course: Course; sections: CourseSection[] }> {
+  const response = await fetch(`${API_URL}/api/courses/${id}`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取课程失败");
+  return response.json();
+}
+
+/** 获取课程列表 */
+export async function getCourses(): Promise<{ courses: Course[] }> {
+  const response = await fetch(`${API_URL}/api/courses`, { headers: authHeaders() });
+  if (!response.ok) throw new Error("获取课程列表失败");
+  return response.json();
+}
+
+/** 删除课程 */
+export async function deleteCourse(id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/courses/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error("删除课程失败");
+}
+
+// ===== 共享类型定义 =====
+
+export interface WrongBookEntry {
+  id: string;
+  quiz_attempt_id: string;
+  concept: string;
+  error_type: string;
+  question: string;
+  user_answer: string;
+  reviewed: boolean;
+  review_count: number;
+  next_review?: string;
+  created_at: string;
+}
+
+export interface WrongBookStat {
+  error_type: string;
+  count: number;
+}
+
+export interface WeakPoint {
+  concept: string;
+  confidence: number;
+}
+
+export interface DashboardStats {
+  total_conversations: number;
+  total_messages: number;
+  total_resources: number;
+  total_courses: number;
+  total_days: number;
+  streak: number;
+  weak_points: WeakPoint[];
+  trend: { date: string; count: number }[];
+}
+
+export interface HeatmapEntry {
+  date: string;
+  count: number;
+}
+
+export interface MasteryDistribution {
+  mastered: number;
+  learning: number;
+  weak: number;
+  total: number;
+}
+
+export interface ConvSummary {
+  id: string;
+  title: string;
+  last_message: string;
+  message_count: number;
+  updated_at: string;
+}
+
+export interface KnowledgeStats {
+  total: number;
+  new: number;
+  learning: number;
+  mastered: number;
+  recent: { concept: string; confidence: number }[];
+}
+
+export interface CalendarDay {
+  date: string;
+  count: number;
+}
+
+export interface ProviderSettings {
+  active: string;
+  providers: { id: string; name: string; model: string }[];
+}
+
+export interface ExamPlan {
+  id: string;
+  title: string;
+  exam_date: string;
+  concepts: string[];
+  acceleration_factor: number;
+  active: boolean;
+  created_at: string;
+}
+
+export interface ReviewItem {
+  id: string;
+  concept: string;
+  confidence: number;
+  interval_days: number;
+  next_review: string;
+}
+
+export interface QuizSubmitResult {
+  is_correct: boolean;
+  score: number;
+  explanation?: string;
+  concept?: string;
+}
+
+export interface Course {
+  id: string;
+  title: string;
+  summary: string;
+  difficulty_level: string;
+  section_count: number;
+  created_at: string;
+}
+
+export interface CourseSection {
+  id: string;
+  course_id: string;
+  title: string;
+  summary: string;
+  content: string;
+  order_index: number;
+  learning_objectives: string;
+  question_prompts: string;
+  created_at: string;
+}

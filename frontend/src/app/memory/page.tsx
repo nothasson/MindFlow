@@ -4,34 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-interface ConvSummary {
-  id: string;
-  title: string;
-  last_message: string;
-  message_count: number;
-  updated_at: string;
-}
-
-interface RecentConcept {
-  concept: string;
-  confidence: number;
-}
-
-interface KnowledgeStats {
-  total: number;
-  new: number;
-  learning: number;
-  mastered: number;
-  recent: RecentConcept[];
-}
-
-interface CalendarDay {
-  date: string;
-  count: number;
-}
+import {
+  getRecentConversations,
+  getRecentKnowledge,
+  getCalendarStats,
+  searchMemory,
+  type ConvSummary,
+  type KnowledgeStats,
+  type CalendarDay,
+} from "@/lib/api";
 
 export default function MemoryPage() {
   const [conversations, setConversations] = useState<ConvSummary[]>([]);
@@ -42,18 +23,15 @@ export default function MemoryPage() {
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/conversations/recent`)
-      .then((r) => r.json())
+    getRecentConversations()
       .then((d) => setConversations(d.conversations || []))
       .catch(() => {});
 
-    fetch(`${API_URL}/api/knowledge/recent`)
-      .then((r) => r.json())
+    getRecentKnowledge()
       .then((d) => setKnowledge(d))
       .catch(() => {});
 
-    fetch(`${API_URL}/api/stats/calendar`)
-      .then((r) => r.json())
+    getCalendarStats()
       .then((d) => setCalendar(d.days || []))
       .catch(() => {});
   }, []);
@@ -62,8 +40,7 @@ export default function MemoryPage() {
     if (!searchQuery.trim()) return;
     setSearching(true);
     try {
-      const res = await fetch(`${API_URL}/api/memory/search?q=${encodeURIComponent(searchQuery)}`);
-      const data = await res.json();
+      const data = await searchMemory(searchQuery);
       setSearchResults(data.results || []);
     } catch {
       setSearchResults([]);

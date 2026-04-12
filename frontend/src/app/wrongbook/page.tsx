@@ -5,26 +5,8 @@ import Link from "next/link";
 
 import { MainShell } from "@/components/layout/MainShell";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-interface WrongBookEntry {
-  id: string;
-  quiz_attempt_id: string;
-  concept: string;
-  error_type: string;
-  question: string;
-  user_answer: string;
-  reviewed: boolean;
-  review_count: number;
-  next_review?: string;
-  created_at: string;
-}
-
-interface WrongBookStat {
-  error_type: string;
-  count: number;
-}
+import { getWrongBook, getWrongBookStats, reviewWrongBook, deleteWrongBook } from "@/lib/api";
+import type { WrongBookEntry, WrongBookStat } from "@/lib/api";
 
 const ERROR_TYPE_LABELS: Record<string, string> = {
   knowledge_gap: "知识遗漏",
@@ -56,18 +38,12 @@ export default function WrongBookPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [entriesRes, statsRes] = await Promise.all([
-        fetch(`${API_URL}/api/wrongbook`),
-        fetch(`${API_URL}/api/wrongbook/stats`),
+      const [entriesData, statsData] = await Promise.all([
+        getWrongBook(),
+        getWrongBookStats(),
       ]);
-      if (entriesRes.ok) {
-        const data = await entriesRes.json();
-        setEntries(data.entries ?? []);
-      }
-      if (statsRes.ok) {
-        const data = await statsRes.json();
-        setStats(data.stats ?? []);
-      }
+      setEntries(entriesData.entries ?? []);
+      setStats(statsData.stats ?? []);
     } catch {
       // 静默失败
     } finally {
@@ -80,12 +56,12 @@ export default function WrongBookPage() {
   }, [fetchData]);
 
   const markReviewed = async (id: string) => {
-    await fetch(`${API_URL}/api/wrongbook/${id}/review`, { method: "POST" });
+    await reviewWrongBook(id);
     fetchData();
   };
 
   const deleteEntry = async (id: string) => {
-    await fetch(`${API_URL}/api/wrongbook/${id}`, { method: "DELETE" });
+    await deleteWrongBook(id);
     fetchData();
   };
 
