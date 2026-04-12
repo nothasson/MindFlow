@@ -46,14 +46,32 @@ async function request<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, options);
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      error?: string;
-    } | null;
-    throw new Error(body?.error || `请求失败 (${response.status})`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      throw new Error(body?.error || `请求失败 (${response.status})`);
+    }
+    return response.json();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("请求超时，请检查网络或稍后重试");
+    }
+    if (error instanceof Error && error.message === "Network request failed") {
+      throw new Error("网络连接失败，请检查后端地址或网络状态");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return response.json();
 }
 
 // ===== 认证 API =====

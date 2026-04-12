@@ -145,6 +145,7 @@ export function HomeScreen() {
             <Text style={styles.emptySubtitle}>
               输入你想学的内容，AI 会用苏格拉底式对话一步步引导你理解、提问和复盘。
             </Text>
+            <Text style={styles.emptyFeatureHint}>学习方式</Text>
             <View style={styles.emptyFeatureRow}>
               <View style={styles.featurePill}>
                 <Text style={styles.featurePillText}>对话式学习</Text>
@@ -283,7 +284,14 @@ const styles = StyleSheet.create({
     color: colors.stone500,
     textAlign: "center",
     lineHeight: 22,
-    marginBottom: 18,
+    marginBottom: 14,
+  },
+  emptyFeatureHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 1,
+    color: colors.stone400,
+    marginBottom: 10,
   },
   emptyFeatureRow: {
     flexDirection: "row",
@@ -293,15 +301,13 @@ const styles = StyleSheet.create({
   },
   featurePill: {
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "rgba(255,255,255,0.72)",
-    borderWidth: 1,
-    borderColor: "rgba(214, 211, 209, 0.7)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(255,255,255,0.42)",
   },
   featurePillText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.stone600,
+    fontSize: 11,
+    fontWeight: "500",
+    color: colors.stone500,
   },
 });
