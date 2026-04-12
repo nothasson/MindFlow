@@ -192,9 +192,24 @@ func main() {
 
 	// Provider 设置 API (read-only for security)
 	// Provider switching requires backend restart and environment variable configuration.
-	// This endpoint is provided for informational purposes only to show the active provider.
-	// See README.md "Configuration" section for instructions on switching providers.
 	h.GET("/api/settings/provider", func(ctx context.Context, c *app.RequestContext) {
+		c.JSON(200, utils.H{
+			"active":    modelSwitch.Active(),
+			"providers": modelSwitch.Providers(),
+		})
+	})
+	h.PUT("/api/settings/provider", func(ctx context.Context, c *app.RequestContext) {
+		var req struct {
+			Provider string `json:"provider"`
+		}
+		if err := c.BindJSON(&req); err != nil || req.Provider == "" {
+			c.JSON(400, utils.H{"error": "缺少 provider 参数"})
+			return
+		}
+		if err := modelSwitch.SetActive(req.Provider); err != nil {
+			c.JSON(400, utils.H{"error": err.Error()})
+			return
+		}
 		c.JSON(200, utils.H{
 			"active":    modelSwitch.Active(),
 			"providers": modelSwitch.Providers(),

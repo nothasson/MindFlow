@@ -10,7 +10,7 @@ router = APIRouter()
 @router.post("/search", response_model=SearchResponse)
 async def search(request: SearchRequest):
     """向量相似度搜索"""
-    embeddings, _ = embed_texts([request.query])
+    embeddings, _ = await embed_texts([request.query])
     query_vector = embeddings[0]
 
     results = search_vectors(

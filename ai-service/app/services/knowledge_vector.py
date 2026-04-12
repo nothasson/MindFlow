@@ -1,5 +1,6 @@
 """知识点向量存储服务 — 独立 collection 'knowledge_embeddings'"""
 
+import asyncio
 import uuid
 
 from qdrant_client.models import PointStruct
@@ -15,14 +16,19 @@ class KnowledgeVectorStore:
 
     def __init__(self) -> None:
         self._initialized = False
+        self._lock = asyncio.Lock()
 
-    def _ensure_collection(self, dimension: int) -> None:
-        """懒初始化：首次操作时创建 collection"""
-        if not self._initialized:
+    async def _ensure_collection(self, dimension: int) -> None:
+        """懒初始化：首次操作时创建 collection（加锁防并发竞态）"""
+        if self._initialized:
+            return
+        async with self._lock:
+            if self._initialized:
+                return
             ensure_collection(COLLECTION, dimension)
             self._initialized = True
 
-    def upsert_knowledge(
+    async def upsert_knowledge(
         self,
         concept: str,
         description: str,
@@ -34,8 +40,8 @@ class KnowledgeVectorStore:
         返回生成的 point id。
         """
         text = f"{concept}: {description}" if description else concept
-        embeddings, dimension = embed_texts([text])
-        self._ensure_collection(dimension)
+        embeddings, dimension = await embed_texts([text])
+        await self._ensure_collection(dimension)
 
         point_id = str(uuid.uuid4())
         payload = {
@@ -58,13 +64,13 @@ class KnowledgeVectorStore:
         )
         return point_id
 
-    def search_similar(self, query: str, top_k: int = 5) -> list[dict]:
+    async def search_similar(self, query: str, top_k: int = 5) -> list[dict]:
         """语义搜索相关知识点。
 
         返回列表，每项包含 concept、description、score、metadata。
         """
-        embeddings, dimension = embed_texts([query])
-        self._ensure_collection(dimension)
+        embeddings, dimension = await embed_texts([query])
+        await self._ensure_collection(dimension)
 
         results = get_client().query_points(
             collection_name=COLLECTION,
@@ -86,7 +92,7 @@ class KnowledgeVectorStore:
             for hit in results.points
         ]
 
-    def find_confusable(
+    async def find_confusable(
         self,
         concept: str,
         threshold: float = 0.85,
@@ -96,8 +102,8 @@ class KnowledgeVectorStore:
 
         先对 concept 做语义搜索，筛选出相似度 >= threshold 且概念名不同的结果。
         """
-        embeddings, dimension = embed_texts([concept])
-        self._ensure_collection(dimension)
+        embeddings, dimension = await embed_texts([concept])
+        await self._ensure_collection(dimension)
 
         results = get_client().query_points(
             collection_name=COLLECTION,

@@ -92,6 +92,9 @@ services:
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.siliconflow.cn/v1}
       - LLM_MODEL=${LLM_MODEL:-Pro/zai-org/GLM-5.1}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-${LLM_API_KEY}}
+      - EMBEDDING_API_URL=${EMBEDDING_API_URL:-https://api.siliconflow.cn/v1/embeddings}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-m3}
     depends_on:
       qdrant:
         condition: service_healthy

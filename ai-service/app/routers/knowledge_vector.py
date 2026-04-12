@@ -68,7 +68,7 @@ class KnowledgeConfusableResponse(BaseModel):
 @router.post("/embed", response_model=KnowledgeEmbedResponse)
 async def embed_knowledge(request: KnowledgeEmbedRequest):
     """将知识点写入向量库"""
-    point_id = knowledge_vector_store.upsert_knowledge(
+    point_id = await knowledge_vector_store.upsert_knowledge(
         concept=request.concept,
         description=request.description,
         metadata=request.metadata,
@@ -79,7 +79,7 @@ async def embed_knowledge(request: KnowledgeEmbedRequest):
 @router.post("/search", response_model=KnowledgeSearchResponse)
 async def search_knowledge(request: KnowledgeSearchRequest):
     """语义搜索知识点"""
-    results = knowledge_vector_store.search_similar(
+    results = await knowledge_vector_store.search_similar(
         query=request.query,
         top_k=request.top_k,
     )
@@ -91,7 +91,7 @@ async def search_knowledge(request: KnowledgeSearchRequest):
 @router.post("/confusable", response_model=KnowledgeConfusableResponse)
 async def find_confusable(request: KnowledgeConfusableRequest):
     """查找易混淆概念"""
-    confusable = knowledge_vector_store.find_confusable(
+    confusable = await knowledge_vector_store.find_confusable(
         concept=request.concept,
         threshold=request.threshold,
     )

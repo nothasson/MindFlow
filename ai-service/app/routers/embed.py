@@ -9,5 +9,5 @@ router = APIRouter()
 @router.post("/embed", response_model=EmbedResponse)
 async def embed(request: EmbedRequest):
     """生成文本嵌入向量"""
-    embeddings, dimension = embed_texts(request.texts)
+    embeddings, dimension = await embed_texts(request.texts)
     return EmbedResponse(embeddings=embeddings, dimension=dimension)
